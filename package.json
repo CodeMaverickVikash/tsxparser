@@ -1,14 +1,10 @@
 {
   "name": "tsxparser",
-  "displayName": "TsxParser",
-  "description": "Shows JSX tree breadcrumb like WebStorm",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.110.0"
-  },
-  "categories": [
-    "Other"
-  ],
+  "displayName": "TsxParser — WebStorm Intelligence",
+  "description": "WebStorm-parity JSX/TSX intelligence: Go To Def, Find Usages, Import Graph, Auto Import, Rename",
+  "version": "0.2.0",
+  "engines": { "vscode": "^1.110.0" },
+  "categories": ["Other"],
   "activationEvents": [
     "onLanguage:javascriptreact",
     "onLanguage:typescriptreact",
@@ -27,11 +23,68 @@
       ]
     },
     "commands": [
+      { "command": "tsxAstTree.revealRange",           "title": "Go to AST Node" },
+      { "command": "tsxAstTree.findSymbol",            "title": "TSX: Find Symbol (Project-wide)", "icon": "$(search)" },
+      { "command": "frontendAI.goToDefinition",        "title": "FrontendAI: Go To Definition",    "icon": "$(go-to-file)" },
+      { "command": "frontendAI.findUsages",            "title": "FrontendAI: Find All Usages",     "icon": "$(references)" },
+      { "command": "frontendAI.showDependencies",      "title": "FrontendAI: Show Dependencies",   "icon": "$(type-hierarchy-sub)" },
+      { "command": "frontendAI.showDependents",        "title": "FrontendAI: Show Dependents",     "icon": "$(type-hierarchy-super)" },
+      { "command": "frontendAI.showCircularDeps",      "title": "FrontendAI: Show Circular Dependencies", "icon": "$(warning)" },
+      { "command": "frontendAI.addImport",             "title": "FrontendAI: Add Import",          "icon": "$(add)" },
+      { "command": "frontendAI.renameSymbol",          "title": "FrontendAI: Rename Symbol",       "icon": "$(edit)" },
+      { "command": "frontendAI.cacheStats",            "title": "FrontendAI: AST Cache Stats",     "icon": "$(database)" }
+    ],
+    "keybindings": [
       {
-        "command": "tsxAstTree.revealRange",
-        "title": "Go to AST Node"
+        "command": "frontendAI.goToDefinition",
+        "key": "f12",
+        "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/"
+      },
+      {
+        "command": "frontendAI.findUsages",
+        "key": "shift+f12",
+        "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/"
+      },
+      {
+        "command": "frontendAI.renameSymbol",
+        "key": "f2",
+        "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "frontendAI.goToDefinition",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "navigation@1"
+        },
+        {
+          "command": "frontendAI.findUsages",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "navigation@2"
+        },
+        {
+          "command": "frontendAI.renameSymbol",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "navigation@3"
+        },
+        {
+          "command": "frontendAI.showDependencies",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "frontendAI@1"
+        },
+        {
+          "command": "frontendAI.showDependents",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "frontendAI@2"
+        },
+        {
+          "command": "frontendAI.addImport",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "frontendAI@3"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "webpack",
