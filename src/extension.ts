@@ -1,46 +1,72 @@
-import * as vscode from "vscode";
-import { getJsxBreadcrumbs } from "./jsxParser";
+import * as vscode from 'vscode';
+import { AstTreeProvider } from './astTreeProvider';
+import { BreadcrumbProvider } from './breadcrumbProvider';
+import { JsxDocumentSymbolProvider } from './documentSymbolProvider';
 
-let panel: vscode.WebviewPanel | undefined;
+const SUPPORTED = ['javascriptreact', 'typescriptreact', 'typescript', 'javascript'];
+const SELECTOR: vscode.DocumentSelector = SUPPORTED.map(lang => ({ language: lang }));
+
+function isSupported(doc: vscode.TextDocument) {
+  return SUPPORTED.includes(doc.languageId);
+}
 
 export function activate(context: vscode.ExtensionContext) {
-  const update = () => {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) return;
+  const treeProvider = new AstTreeProvider();
+  const breadcrumb = new BreadcrumbProvider();
 
-    const doc = editor.document;
-    if (!doc.fileName.endsWith(".tsx") && !doc.fileName.endsWith(".jsx")) return;
+  // ✅ KEY: registers with VS Code's native top breadcrumb bar
+  const symbolProvider = vscode.languages.registerDocumentSymbolProvider(
+    SELECTOR,
+    new JsxDocumentSymbolProvider()
+  );
 
-    const code = doc.getText();
-    const offset = doc.offsetAt(editor.selection.active);
+  const treeView = vscode.window.createTreeView('tsxAstTree', {
+    treeDataProvider: treeProvider,
+    showCollapseAll: true,
+  });
 
-    const crumbs = getJsxBreadcrumbs(code, offset);
-
-    if (!panel) {
-      panel = vscode.window.createWebviewPanel(
-        "jsxBreadcrumb",
-        "JSX Breadcrumb",
-        vscode.ViewColumn.Beside,
-        { enableScripts: true }
-      );
+  // ✅ FIXED: revealRange command was missing
+  const revealCmd = vscode.commands.registerCommand(
+    'tsxAstTree.revealRange',
+    (uri: vscode.Uri, range: vscode.Range) => {
+      vscode.window.showTextDocument(uri).then(editor => {
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+        editor.selection = new vscode.Selection(range.start, range.start);
+      });
     }
+  );
 
-    panel.webview.html = `
-      <html>
-      <body style="background:#1e1e1e;color:white;font-family:sans-serif;padding:8px">
-        ${crumbs.map((c, i) =>
-          `<span style="color:#4FC3F7">${c}</span>${i < crumbs.length - 1 ? " > " : ""}`
-        ).join("")}
-      </body>
-      </html>
-    `;
-  };
+  let debounceTimer: NodeJS.Timeout;
 
-  vscode.window.onDidChangeTextEditorSelection(update);
-  vscode.workspace.onDidChangeTextDocument(update);
-  vscode.window.onDidChangeActiveTextEditor(update);
+  vscode.window.onDidChangeActiveTextEditor(editor => {
+    if (editor && isSupported(editor.document)) {
+      treeProvider.refresh(editor.document);
+      breadcrumb.update(editor);
+    }
+  }, null, context.subscriptions);
 
-  context.subscriptions.push({ dispose: () => panel?.dispose() });
+  vscode.window.onDidChangeTextEditorSelection(e => {
+    if (isSupported(e.textEditor.document)) {
+      breadcrumb.update(e.textEditor);
+    }
+  }, null, context.subscriptions);
+
+  vscode.workspace.onDidChangeTextDocument(e => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && e.document === editor.document && isSupported(e.document)) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => treeProvider.refresh(e.document), 300);
+    }
+  }, null, context.subscriptions);
+
+  const activeEditor = vscode.window.activeTextEditor;
+  if (activeEditor && isSupported(activeEditor.document)) {
+    treeProvider.refresh(activeEditor.document);
+    breadcrumb.update(activeEditor);
+  }
+
+  // ✅ FIXED: all disposables properly registered
+  context.subscriptions.push(treeView, revealCmd, symbolProvider, breadcrumb);
 }
 
 export function deactivate() {}
