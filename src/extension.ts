@@ -4,15 +4,12 @@ import { getJsxBreadcrumbs } from "./jsxParser";
 let panel: vscode.WebviewPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  const updateBreadcrumbs = () => {
+  const update = () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
 
     const doc = editor.document;
-
-    if (!doc.fileName.endsWith(".tsx") && !doc.fileName.endsWith(".jsx")) {
-      return;
-    }
+    if (!doc.fileName.endsWith(".tsx") && !doc.fileName.endsWith(".jsx")) return;
 
     const code = doc.getText();
     const offset = doc.offsetAt(editor.selection.active);
@@ -28,34 +25,22 @@ export function activate(context: vscode.ExtensionContext) {
       );
     }
 
-    panel.webview.html = getHtml(crumbs);
+    panel.webview.html = `
+      <html>
+      <body style="background:#1e1e1e;color:white;font-family:sans-serif;padding:8px">
+        ${crumbs.map((c, i) =>
+          `<span style="color:#4FC3F7">${c}</span>${i < crumbs.length - 1 ? " > " : ""}`
+        ).join("")}
+      </body>
+      </html>
+    `;
   };
 
-  vscode.window.onDidChangeTextEditorSelection(updateBreadcrumbs);
-  vscode.workspace.onDidChangeTextDocument(updateBreadcrumbs);
+  vscode.window.onDidChangeTextEditorSelection(update);
+  vscode.workspace.onDidChangeTextDocument(update);
+  vscode.window.onDidChangeActiveTextEditor(update);
 
-  context.subscriptions.push({
-    dispose: () => panel?.dispose(),
-  });
-}
-
-function getHtml(crumbs: string[]): string {
-  return `
-    <html>
-    <body style="font-family:sans-serif;padding:10px;background:#1e1e1e;color:white">
-      <div style="font-size:14px;">
-        ${crumbs
-          .map(
-            (c, i) =>
-              `<span style="color:#4FC3F7">${c}</span>${
-                i < crumbs.length - 1 ? " > " : ""
-              }`
-          )
-          .join("")}
-      </div>
-    </body>
-    </html>
-  `;
+  context.subscriptions.push({ dispose: () => panel?.dispose() });
 }
 
 export function deactivate() {}

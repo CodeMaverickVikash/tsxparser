@@ -20,12 +20,10 @@
     ]
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "build": "npm run compile",
-    "start": "code .",
-    "debug": "code --extensionDevelopmentPath=.",
-    "prepublish": "npm run compile"
+    "compile": "webpack",
+    "watch": "webpack --watch",
+    "build": "webpack --mode production",
+    "debug": "code --extensionDevelopmentPath=."
   },
   "devDependencies": {
     "@types/vscode": "^1.110.0",
