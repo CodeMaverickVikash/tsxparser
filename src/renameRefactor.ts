@@ -31,10 +31,8 @@
 
 import * as vscode from 'vscode';
 import * as path   from 'path';
-import * as ts     from 'typescript';
-import * as fs     from 'fs';
 import { getIndexer } from './projectIndexer';
-import { resolveAtPosition, resolveSymbol, findIdentifierOccurrencesInFile }  from './symbolResolver';
+import { findIdentifierOccurrencesInFile }  from './symbolResolver';
 
 // ─── Public registration ──────────────────────────────────────────────────────
 
@@ -184,10 +182,7 @@ async function buildRenameEdit(
         const occurrences = findIdentifierOccurrencesInFile(fp, oldName);
         if (occurrences.length === 0) continue;
 
-        // Read full file text to build ranges
-        const text  = fs.readFileSync(fp, 'utf8');
-        const lines = text.split('\n');
-        const uri   = vscode.Uri.file(fp);
+        const uri = vscode.Uri.file(fp);
 
         for (const occ of occurrences) {
           const start = new vscode.Position(occ.line, occ.column);

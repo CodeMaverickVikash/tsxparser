@@ -62,6 +62,9 @@ export class ImportGraph implements vscode.Disposable {
   /** Reverse edges: file → Set<dependents> */
   private readonly _dependents = new Map<string, Set<string>>();
 
+  /** Cached result of the last detectCircular() run; null = dirty (needs recompute). */
+  private _cycleCache: CircularDependency[] | null = null;
+
   private _disposables: vscode.Disposable[] = [];
 
   // ── Build / update ─────────────────────────────────────────────────────────
@@ -70,6 +73,7 @@ export class ImportGraph implements vscode.Disposable {
   buildGraph(): ImportGraphStats {
     this._deps.clear();
     this._dependents.clear();
+    this._cycleCache = null;
 
     const indexer = getIndexer();
     for (const [absPath, parsed] of indexer.index.files) {
@@ -86,6 +90,7 @@ export class ImportGraph implements vscode.Disposable {
 
     // Remove old outgoing edges from abs
     this._unwireFile(abs);
+    this._cycleCache = null;
 
     if (parsed) {
       this._wireFile(abs, parsed.imports.map(i => i.module));
@@ -97,6 +102,7 @@ export class ImportGraph implements vscode.Disposable {
     const abs = path.resolve(filePath);
     this._unwireFile(abs);
     this._deps.delete(abs);
+    this._cycleCache = null;
 
     // Also drop reverse edges pointing to abs
     for (const [, depSet] of this._dependents) {
@@ -133,8 +139,10 @@ export class ImportGraph implements vscode.Disposable {
     return Array.from(visited).sort();
   }
 
-  /** Detect ALL circular dependencies using Tarjan's SCC algorithm. */
+  /** Detect ALL circular dependencies using Tarjan's SCC algorithm. Result is cached until the graph changes. */
   detectCircular(): CircularDependency[] {
+    if (this._cycleCache !== null) return this._cycleCache;
+
     const nodes = Array.from(this._deps.keys());
     const index   = new Map<string, number>();
     const lowlink = new Map<string, number>();
@@ -178,6 +186,7 @@ export class ImportGraph implements vscode.Disposable {
       if (!index.has(n)) strongConnect(n);
     }
 
+    this._cycleCache = sccs;
     return sccs;
   }
 
@@ -203,6 +212,7 @@ export class ImportGraph implements vscode.Disposable {
     for (const d of this._disposables) d.dispose();
     this._deps.clear();
     this._dependents.clear();
+    this._cycleCache = null;
   }
 
   // ── Private wiring ─────────────────────────────────────────────────────────

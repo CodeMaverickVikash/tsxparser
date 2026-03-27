@@ -92,14 +92,14 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // Refresh tree + patch import graph on index changes
-  indexer.onDidChangeIndex(_stats => {
+  const onChangeIndex = indexer.onDidChangeIndex(_stats => {
     const editor = vscode.window.activeTextEditor;
     if (editor && isSupported(editor.document)) {
       treeProvider.refresh(editor.document);
     }
   });
 
-  indexer.onDidUpdateFile(diff => {
+  const onUpdateFile = indexer.onDidUpdateFile(diff => {
     getImportGraph().updateFile(diff.filePath);
     astCache.invalidate(diff.filePath);
   });
@@ -194,6 +194,8 @@ export function activate(context: vscode.ExtensionContext): void {
     breadcrumb,
     findSymbolCmd,
     indexer,
+    onChangeIndex,
+    onUpdateFile,
     { dispose: () => getImportGraph().dispose() },
   );
 }

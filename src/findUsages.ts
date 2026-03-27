@@ -28,8 +28,7 @@ import * as vscode from 'vscode';
 import * as path   from 'path';
 import * as ts     from 'typescript';
 import * as fs     from 'fs';
-import { getIndexer }               from './projectIndexer';
-import { resolveAtPosition }        from './symbolResolver';
+import { getIndexer }                      from './projectIndexer';
 import { findIdentifierOccurrencesInFile } from './symbolResolver';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -81,8 +80,7 @@ async function findUsagesHandler(): Promise<void> {
   const position = editor.selection.active;
   const document = editor.document;
 
-  // Resolve symbol under cursor
-  const resolved = resolveAtPosition(document, position, { exactOnly: false, maxFuzzy: 1 });
+  // Resolve symbol name under cursor
   const symbolName = wordAt(document, position);
 
   if (!symbolName) {
