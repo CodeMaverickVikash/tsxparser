@@ -24,6 +24,7 @@ import { getImportGraph, registerImportGraphCommands } from './importGraph';
 import { registerAutoImport }             from './autoImport';
 import { registerRenameRefactor }         from './renameRefactor';
 import { getAstCache, registerCacheDiagnosticsCommand } from './astCache';
+import { registerInlineUsagesLens }       from './inlineUsagesLens';
 
 const SUPPORTED = ['javascriptreact', 'typescriptreact', 'typescript', 'javascript'];
 const SELECTOR: vscode.DocumentSelector = SUPPORTED.map(lang => ({ language: lang }));
@@ -111,6 +112,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerImportGraphCommands(context); // showDependencies / showDependents / showCircularDeps
   registerAutoImport(context);          // Ctrl+. quick-fix + frontendAI.addImport
   registerRenameRefactor(context);      // F2 + frontendAI.renameSymbol
+  registerInlineUsagesLens(context);    // Inline "N usages" CodeLens → peek panel
 
   // ── Existing symbol search command ────────────────────────────────────────
   const findSymbolCmd = vscode.commands.registerCommand(
