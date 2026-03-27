@@ -25,6 +25,7 @@ import { registerAutoImport }             from './autoImport';
 import { registerRenameRefactor }         from './renameRefactor';
 import { getAstCache, registerCacheDiagnosticsCommand } from './astCache';
 import { registerInlineUsagesLens }       from './inlineUsagesLens';
+import { registerHoverProvider }          from './hoverProvider';
 
 const SUPPORTED = ['javascriptreact', 'typescriptreact', 'typescript', 'javascript'];
 const SELECTOR: vscode.DocumentSelector = SUPPORTED.map(lang => ({ language: lang }));
@@ -113,6 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerAutoImport(context);          // Ctrl+. quick-fix + frontendAI.addImport
   registerRenameRefactor(context);      // F2 + frontendAI.renameSymbol
   registerInlineUsagesLens(context);    // Inline "N usages" CodeLens → peek panel
+  registerHoverProvider(context);       // Rich hover: signature + import + definition link
 
   // ── Existing symbol search command ────────────────────────────────────────
   const findSymbolCmd = vscode.commands.registerCommand(

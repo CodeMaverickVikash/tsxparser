@@ -110,7 +110,10 @@ export function registerInlineUsagesLens(context: vscode.ExtensionContext): void
   // ── Register CodeLens provider ────────────────────────────────────────────
   const lensReg = vscode.languages.registerCodeLensProvider(SELECTOR, provider);
 
-  // ── Command: open the native peek-references panel ────────────────────────
+  // ── Command: smart-route by usage count ──────────────────────────────────
+  //    0 usages  → info message
+  //    1 usage   → navigate directly (no panel)
+  //    2+ usages → open VS Code peek-references panel
   const showCmd = vscode.commands.registerCommand(
     COMMAND,
     async (uri: vscode.Uri, position: vscode.Position, symbolName: string) => {
@@ -125,7 +128,23 @@ export function registerInlineUsagesLens(context: vscode.ExtensionContext): void
             )
           );
 
-          // Opens the inline peek-references panel (WebStorm-style floating popup).
+          if (locations.length === 0) {
+            vscode.window.showInformationMessage(
+              `frontendAI: No usages found for "${symbolName}".`
+            );
+            return;
+          }
+
+          if (locations.length === 1) {
+            // Single usage — jump straight there, no panel needed.
+            const loc    = locations[0];
+            const editor = await vscode.window.showTextDocument(loc.uri, { preview: false });
+            editor.revealRange(loc.range, vscode.TextEditorRevealType.InCenter);
+            editor.selection = new vscode.Selection(loc.range.start, loc.range.start);
+            return;
+          }
+
+          // Multiple usages — open the inline peek-references panel.
           await vscode.commands.executeCommand(
             'editor.action.showReferences',
             uri,
