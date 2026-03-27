@@ -33,9 +33,8 @@ import * as vscode from 'vscode';
 import * as path   from 'path';
 import * as ts     from 'typescript';
 import * as fs     from 'fs';
-import { getIndexer }                        from './projectIndexer';
-import { resolveAtPosition, resolveSymbol }  from './symbolResolver';
-import { findIdentifierOccurrencesInFile }   from './symbolResolver';
+import { getIndexer } from './projectIndexer';
+import { resolveAtPosition, resolveSymbol, findIdentifierOccurrencesInFile }  from './symbolResolver';
 
 // ─── Public registration ──────────────────────────────────────────────────────
 

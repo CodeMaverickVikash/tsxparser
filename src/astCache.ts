@@ -1,9 +1,9 @@
 /**
- * astCache.ts — High-Performance AST Cache for 10 k+ File Projects
+ * AstCache.ts — High-Performance AST Cache for 10 k+ File Projects
  *
  * ─── Problem ──────────────────────────────────────────────────────────────────
  *
- *  The default astParser cache is an unbounded Map that never evicts entries.
+ *  The default AstCache cache is an unbounded Map that never evicts entries.
  *  In large mono-repos this causes:
  *    • Unbounded memory growth (stale ASTs kept forever)
  *    • Re-parses on every activation (mtime only, no content hash)
