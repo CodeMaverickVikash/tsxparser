@@ -178,8 +178,9 @@ export class JsxDocumentSymbolProvider implements vscode.DocumentSymbolProvider 
     return `${tag}${qualifier}`;
   }
 
-  // ── Extract string value from JSX attribute initializer ────────
-  private attrStringValue(init: ts.StringLiteral | ts.JsxExpression): string | null {
+  // FIX: JsxAttributeValue in newer TS includes JsxElement | JsxFragment too.
+  // Accept the full union type and handle only the cases we care about.
+  private attrStringValue(init: ts.JsxAttributeValue): string | null {
     if (ts.isStringLiteral(init)) return init.text;
     // {`template`} or {"string"}
     if (ts.isJsxExpression(init) && init.expression) {

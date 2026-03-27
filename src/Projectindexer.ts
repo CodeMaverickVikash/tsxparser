@@ -49,7 +49,7 @@
 
 import * as vscode from 'vscode';
 import * as path   from 'path';
-import { parseFile, parseDocument, invalidateCache, ParsedFile } from './astParser';
+import { parseFile, parseDocument, invalidateCache, ParsedFile } from './Astparser';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 

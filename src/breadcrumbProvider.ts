@@ -114,7 +114,9 @@ export class BreadcrumbProvider {
     return `${tag}${qualifier}`;
   }
 
-  private attrString(init: ts.StringLiteral | ts.JsxExpression): string | null {
+  // FIX: JsxAttributeValue = StringLiteral | JsxExpression | JsxElement | JsxFragment
+  // We must handle all union members, not just StringLiteral | JsxExpression.
+  private attrString(init: ts.JsxAttributeValue): string | null {
     if (ts.isStringLiteral(init)) return init.text;
     if (ts.isJsxExpression(init) && init.expression) {
       if (ts.isStringLiteral(init.expression)) return init.expression.text;

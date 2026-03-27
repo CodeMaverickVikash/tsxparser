@@ -20,8 +20,8 @@ import * as vscode from 'vscode';
 import * as path   from 'path';
 import * as fs     from 'fs';
 import * as ts     from 'typescript';
-import { getIndexer, IndexedSymbol } from './projectIndexer';
-import { parseFile }                 from './astParser';
+import { getIndexer, IndexedSymbol } from './Projectindexer';
+import { parseFile }                 from './Astparser';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 

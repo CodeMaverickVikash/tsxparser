@@ -229,10 +229,21 @@ function parseText(filePath: string, text: string): ParsedFile {
 
   const ctx: ParseContext = { sf, text };
 
+  // FIX: parseDiagnostics is internal/private in newer TS versions.
+  // Use the public API instead: check for syntactic diagnostics length > 0.
+  let hasErrors = false;
+  try {
+    // Access via type assertion as it may exist as internal property
+    const diags = (sf as any).parseDiagnostics;
+    hasErrors = Array.isArray(diags) ? diags.length > 0 : false;
+  } catch {
+    hasErrors = false;
+  }
+
   const result: ParsedFile = {
     filePath,
     parsedAt:  new Date().toISOString(),
-    hasErrors: sf.parseDiagnostics?.length > 0,
+    hasErrors,
     functions: [],
     classes:   [],
     variables: [],
@@ -625,10 +636,13 @@ function extractVariableDeclaration(
         initKind = 'call';
       }
     }
+    // FIX: ts.isBooleanLiteral does not exist in the public API.
+    // Use SyntaxKind checks for true/false literals instead.
     else if (
       ts.isStringLiteral(init)  ||
       ts.isNumericLiteral(init) ||
-      ts.isBooleanLiteral(init)
+      init.kind === ts.SyntaxKind.TrueKeyword ||
+      init.kind === ts.SyntaxKind.FalseKeyword
     ) {
       initKind = 'literal';
     }
@@ -654,7 +668,8 @@ function extractBindingPattern(
 
   const results: ParsedVariable[] = [];
 
-  const collect = (bp: ts.BindingPattern) => {
+  // FIX: ts.isBindingPattern does not exist. Use the two individual checks instead.
+  const collect = (bp: ts.ObjectBindingPattern | ts.ArrayBindingPattern) => {
     for (const el of bp.elements) {
       if (ts.isOmittedExpression(el)) continue;
 
@@ -664,7 +679,7 @@ function extractBindingPattern(
 
       if (!name) {
         // Nested pattern — recurse
-        if (ts.isBindingElement(el) && ts.isBindingPattern(el.name)) {
+        if (ts.isBindingElement(el) && (ts.isObjectBindingPattern(el.name) || ts.isArrayBindingPattern(el.name))) {
           collect(el.name);
         }
         continue;
@@ -680,7 +695,9 @@ function extractBindingPattern(
     }
   };
 
-  if (ts.isBindingPattern(decl.name)) collect(decl.name);
+  if (ts.isObjectBindingPattern(decl.name) || ts.isArrayBindingPattern(decl.name)) {
+    collect(decl.name);
+  }
   return results;
 }
 
