@@ -1,6 +1,6 @@
-# CodePilot
+# CodePilotStorm
 
-**CodePilot** is a powerful VS Code extension that brings full-featured JSX/TSX and TypeScript intelligence directly into your editor — covering everything from navigation and refactoring to import management and AST exploration.
+**CodePilotStorm** is a powerful VS Code extension that brings full-featured JSX/TSX and TypeScript intelligence directly into your editor — covering everything from navigation and refactoring to import management and AST exploration.
 
 ---
 
@@ -34,7 +34,7 @@ A dedicated **JSX/TSX Structure** tree view in the Explorer sidebar renders the 
 CodeLens annotations appear above every symbol, showing its usage count inline. Click to expand all references without running a separate search.
 
 ### 📦 Project Indexer
-On activation, CodePilot indexes the entire workspace so that all features work instantly — even on cold start — with incremental updates as files change.
+On activation, CodePilotStorm indexes the entire workspace so that all features work instantly — even on cold start — with incremental updates as files change.
 
 ---
 
@@ -47,7 +47,7 @@ On activation, CodePilot indexes the entire workspace so that all features work 
 
 ## Extension Settings
 
-CodePilot activates automatically for the following language IDs:
+CodePilotStorm activates automatically for the following language IDs:
 
 | Language ID | File Types |
 |---|---|
@@ -91,4 +91,4 @@ All shortcuts are active when the editor is focused on a supported file type.
 
 ---
 
-**Enjoy CodePilot!**
+**Enjoy CodePilotStorm!**
