@@ -95,6 +95,8 @@ export interface ParsedVariable {
   /** Arrow / function → treated as function, hook call, etc. */
   initKind?:     'arrow' | 'function' | 'hook' | 'call' | 'literal' | 'other';
   hookName?:     string;
+  /** Optional detail string (e.g. callee name, type annotation summary) */
+  detail?:       string;
   exported:      boolean;
   span:          Span;
   // ── Framework tag ──────────────────────────────────────────────────────────
@@ -685,6 +687,7 @@ function extractVariableDeclaration(
 
   let initKind: ParsedVariable['initKind'] = 'other';
   let hookName: string | undefined;
+  let detail:   string | undefined;
 
   if (init) {
     if      (ts.isArrowFunction(init))      initKind = 'arrow';
@@ -694,8 +697,10 @@ function extractVariableDeclaration(
       if (/^use[A-Z]/.test(callee) || callee === 'React.useState') {
         initKind = 'hook';
         hookName = callee;
+        detail   = callee;
       } else {
         initKind = 'call';
+        detail   = callee;
       }
     }
     else if (
@@ -714,6 +719,7 @@ function extractVariableDeclaration(
     type:     typText,
     initKind,
     hookName,
+    detail,
     exported,
     span:     spanOf(decl, ctx.sf),
   }];

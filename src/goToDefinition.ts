@@ -1,35 +1,54 @@
 /**
- * goToDefinition.ts — WebStorm-parity "Go To Definition" for the TSX extension
+ * goToDefinition.ts — Framework-Aware "Go To Definition" (WebStorm-parity)
  *
  * ─── What it does ─────────────────────────────────────────────────────────────
  *
- *  • Registers VS Code command  codePilot.goToDefinition
- *  • Also registers as a DefinitionProvider so F12 / Ctrl+Click work natively
- *  • Extracts the word under the cursor
- *  • Resolves symbol via symbolResolver  (exact → CI → fuzzy)
- *  • Single result  → navigate immediately
- *  • Multiple results → show Quick Pick with file path + line number
+ *  • Registers command  codePilot.goToDefinition  and native DefinitionProvider
+ *  • Framework-aware resolution: when in a React file, prefers React components
+ *    and hooks; in Angular prefers services/components; in Vue prefers composables
+ *  • JSX tag names resolve directly to the component definition file
+ *  • Hook calls  useAuth()  resolve to the hook's declaration, not call sites
+ *  • Import path strings resolve to the actual module file
+ *  • Multiple candidates → Quick Pick showing file name + role + signature
  *
- * ─── Usage ────────────────────────────────────────────────────────────────────
+ * ─── Resolution priority (example: React file) ────────────────────────────────
  *
- *  Call registerGoToDefinition(context) inside activate().
+ *   1.  Exported React functional component  (same framework, exported)
+ *   2.  Exported React class component
+ *   3.  Exported React custom hook
+ *   4.  Any other exported symbol in the project
+ *   5.  Non-exported symbols (local only)
+ *
+ * ─── Quick Pick layout ────────────────────────────────────────────────────────
+ *
+ *   ┌─────────────────────────────────────────────────────────────────────┐
+ *   │  $(symbol-class)  Button                                            │
+ *   │  React functional component  ·  src/components/Button.tsx  line 12 │
+ *   │                                                                     │
+ *   │  $(symbol-class)  Button                                            │
+ *   │  React functional component  ·  src/ui/Button.tsx  line 5          │
+ *   └─────────────────────────────────────────────────────────────────────┘
  */
 
 import * as vscode from 'vscode';
 import * as path   from 'path';
-import { resolveAtPosition, resolveSymbol, resolveImportPath, ResolvedSymbol } from './symbolResolver';
+import {
+  resolveAtPosition,
+  resolveSymbol,
+  resolveImportPath,
+  ResolvedSymbol,
+}                  from './symbolResolver';
+import { parseFile } from './astParser';
+import { Framework } from './frameworkDetector';
 
 // ─── Public registration ──────────────────────────────────────────────────────
 
 export function registerGoToDefinition(context: vscode.ExtensionContext): void {
-
-  // ── Manual command ─────────────────────────────────────────────────────────
   const cmd = vscode.commands.registerCommand(
     'codePilot.goToDefinition',
     goToDefinitionHandler
   );
 
-  // ── Native F12 / Ctrl+Click provider ──────────────────────────────────────
   const SELECTOR: vscode.DocumentSelector = [
     { language: 'typescript'      },
     { language: 'typescriptreact' },
@@ -57,24 +76,24 @@ async function goToDefinitionHandler(): Promise<void> {
   const position = editor.selection.active;
   const document = editor.document;
 
-  // ── Check if cursor is on an import path string ───────────────────────────
+  // ── Import path string? ───────────────────────────────────────────────────
   const importPath = tryExtractImportPath(document, position);
   if (importPath !== null) {
     const resolved = resolveImportPath(importPath, document.fileName);
-    if (resolved) {
-      await navigateTo(resolved, 0, 0);
-      return;
-    }
-    vscode.window.showInformationMessage(`CodePilot: Cannot resolve module "${importPath}"`);
+    if (resolved) { await navigateTo(resolved, 0, 0); return; }
+    vscode.window.showInformationMessage(
+      `CodePilot: Cannot resolve module "${importPath}"`
+    );
     return;
   }
 
-  // ── Resolve identifier under cursor ───────────────────────────────────────
   const results = resolveAtPosition(document, position, { maxFuzzy: 15 });
 
   if (results.length === 0) {
     const word = wordAt(document, position) ?? '(unknown)';
-    vscode.window.showInformationMessage(`CodePilot: No definition found for "${word}"`);
+    vscode.window.showInformationMessage(
+      `CodePilot: No definition found for "${word}"`
+    );
     return;
   }
 
@@ -84,8 +103,7 @@ async function goToDefinitionHandler(): Promise<void> {
     return;
   }
 
-  // ── Multiple results → Quick Pick ─────────────────────────────────────────
-  await pickAndNavigate(results);
+  await pickAndNavigate(results, document.fileName);
 }
 
 // ─── DefinitionProvider (F12 / Ctrl+Click) ───────────────────────────────────
@@ -101,22 +119,80 @@ class GoToDefinitionProvider implements vscode.DefinitionProvider {
     if (importPath !== null) {
       const resolved = resolveImportPath(importPath, document.fileName);
       if (resolved) {
-        const uri  = vscode.Uri.file(resolved);
-        const pos  = new vscode.Position(0, 0);
-        return new vscode.Location(uri, pos);
+        return new vscode.Location(vscode.Uri.file(resolved), new vscode.Position(0, 0));
       }
       return null;
     }
 
-    const results = resolveAtPosition(document, position, { exactOnly: false, maxFuzzy: 5 });
+    const results = resolveAtPosition(document, position, {
+      exactOnly: false,
+      maxFuzzy:  5,
+    });
     if (results.length === 0) return null;
 
+    // Return framework-ranked results as DefinitionLinks (richer than Location)
     return results.map(r => {
-      const uri = vscode.Uri.file(r.filePath);
-      const pos = new vscode.Position(r.line, r.column);
-      return new vscode.Location(uri, pos);
+      const targetUri  = vscode.Uri.file(r.filePath);
+      const targetPos  = new vscode.Position(r.line, r.column);
+      const targetRange = new vscode.Range(targetPos, targetPos);
+
+      return {
+        targetUri,
+        targetRange,
+        targetSelectionRange: targetRange,
+      } as vscode.DefinitionLink;
     });
   }
+}
+
+// ─── Framework-aware Quick Pick ───────────────────────────────────────────────
+
+interface DefinitionItem extends vscode.QuickPickItem {
+  resolved: ResolvedSymbol;
+}
+
+async function pickAndNavigate(
+  results:    ResolvedSymbol[],
+  fromFile:   string
+): Promise<void> {
+  const callerFw = getFileFramework(fromFile);
+
+  const items: DefinitionItem[] = results.map(r => {
+    const rel      = vscode.workspace.asRelativePath(r.filePath);
+    const lineNum  = r.line + 1;
+    const sym      = r.symbol;
+
+    // Icon based on symbol type
+    const icon = symbolIcon(sym.type);
+
+    // Primary label: icon + symbol name
+    const label = `$(${icon})  ${sym.name}`;
+
+    // Description: framework role label (e.g. "React functional component")
+    const roleLabel   = r.rankReason ?? sym.type;
+    const matchBadge  = r.matchKind !== 'exact' ? `  [${r.matchKind}]` : '';
+
+    // Detail: file name  ·  line  (this appears below the label in VS Code)
+    const detail = `${roleLabel}${matchBadge}  ·  ${rel}  line ${lineNum}`;
+
+    return { label, description: detail, resolved: r };
+  });
+
+  // Add section separators for different frameworks when mixed results
+  const hasMultiFramework = new Set(
+    results.map(r => r.symbol.framework ?? 'unknown')
+  ).size > 1;
+
+  const picked = await vscode.window.showQuickPick(items, {
+    title:              `Go To Definition${callerFw !== 'unknown' ? `  (${callerFw} context)` : ''}`,
+    placeHolder:        'Select definition to navigate to…',
+    matchOnDescription: true,
+    matchOnDetail:      true,
+  });
+
+  if (!picked) return;
+  const r = picked.resolved;
+  await navigateTo(r.filePath, r.line, r.column);
 }
 
 // ─── Navigation helpers ───────────────────────────────────────────────────────
@@ -134,40 +210,19 @@ async function navigateTo(
   editor.selection = new vscode.Selection(pos, pos);
 }
 
-interface DefinitionItem extends vscode.QuickPickItem {
-  resolved: ResolvedSymbol;
-}
-
-async function pickAndNavigate(results: ResolvedSymbol[]): Promise<void> {
-  const items: DefinitionItem[] = results.map(r => {
-    const rel  = vscode.workspace.asRelativePath(r.filePath);
-    const line = r.line + 1;          // 1-based for display
-    const col  = r.column + 1;
-
-    return {
-      label:       `$(${symbolIcon(r.symbol.type)})  ${r.symbol.name}`,
-      description: r.symbol.detail ?? r.symbol.type,
-      detail:      `${rel}  ·  line ${line}, col ${col}  [${r.matchKind}]`,
-      resolved:    r,
-    };
-  });
-
-  const picked = await vscode.window.showQuickPick(items, {
-    title:           'Go To Definition',
-    placeHolder:     'Select a definition to navigate to',
-    matchOnDescription: true,
-    matchOnDetail:   true,
-  });
-
-  if (!picked) return;
-  const r = picked.resolved;
-  await navigateTo(r.filePath, r.line, r.column);
-}
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
+function getFileFramework(filePath: string): Framework {
+  try {
+    const parsed = parseFile(filePath);
+    return parsed.framework ?? 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 /**
- * If the cursor is inside an import string literal, return the module specifier.
+ * If the cursor is inside an import path string, return the module specifier.
  * Returns null otherwise.
  */
 function tryExtractImportPath(
@@ -176,7 +231,6 @@ function tryExtractImportPath(
 ): string | null {
   const line = document.lineAt(position.line).text;
 
-  // Match:  from '...'  |  require('...')  |  import('...')
   const patterns = [
     /from\s+['"]([^'"]+)['"]/g,
     /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
@@ -193,7 +247,6 @@ function tryExtractImportPath(
       }
     }
   }
-
   return null;
 }
 
