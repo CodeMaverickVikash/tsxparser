@@ -1,7 +1,7 @@
 {
-  "name": "tsxparser",
-  "displayName": "TsxParser — WebStorm Intelligence",
-  "description": "WebStorm-parity JSX/TSX intelligence: Go To Def, Find Usages, Import Graph, Auto Import, Rename",
+  "name": "CodePilot",
+  "displayName": "CodePilot",
+  "description": "Full-featured JSX/TSX & TypeScript intelligence for VS Code: Go To Definition, Find Usages, Import Graph, Auto Import, Rename Refactor, Hover Docs, Breadcrumbs, and AST Explorer.",
   "version": "0.2.0",
   "engines": { "vscode": "^1.110.0" },
   "categories": ["Other"],
