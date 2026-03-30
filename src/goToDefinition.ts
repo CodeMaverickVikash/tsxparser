@@ -3,7 +3,7 @@
  *
  * ─── What it does ─────────────────────────────────────────────────────────────
  *
- *  • Registers VS Code command  frontendAI.goToDefinition
+ *  • Registers VS Code command  codePilot.goToDefinition
  *  • Also registers as a DefinitionProvider so F12 / Ctrl+Click work natively
  *  • Extracts the word under the cursor
  *  • Resolves symbol via symbolResolver  (exact → CI → fuzzy)
@@ -25,7 +25,7 @@ export function registerGoToDefinition(context: vscode.ExtensionContext): void {
 
   // ── Manual command ─────────────────────────────────────────────────────────
   const cmd = vscode.commands.registerCommand(
-    'frontendAI.goToDefinition',
+    'codePilot.goToDefinition',
     goToDefinitionHandler
   );
 
@@ -50,7 +50,7 @@ export function registerGoToDefinition(context: vscode.ExtensionContext): void {
 async function goToDefinitionHandler(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
-    vscode.window.showWarningMessage('frontendAI: No active editor.');
+    vscode.window.showWarningMessage('CodePilot: No active editor.');
     return;
   }
 
@@ -65,7 +65,7 @@ async function goToDefinitionHandler(): Promise<void> {
       await navigateTo(resolved, 0, 0);
       return;
     }
-    vscode.window.showInformationMessage(`frontendAI: Cannot resolve module "${importPath}"`);
+    vscode.window.showInformationMessage(`CodePilot: Cannot resolve module "${importPath}"`);
     return;
   }
 
@@ -74,7 +74,7 @@ async function goToDefinitionHandler(): Promise<void> {
 
   if (results.length === 0) {
     const word = wordAt(document, position) ?? '(unknown)';
-    vscode.window.showInformationMessage(`frontendAI: No definition found for "${word}"`);
+    vscode.window.showInformationMessage(`CodePilot: No definition found for "${word}"`);
     return;
   }
 

@@ -5,12 +5,12 @@
  *  ✅ BreadcrumbProvider         — status-bar breadcrumb trail
  *  ✅ JsxDocumentSymbolProvider  — outline view (Ctrl+Shift+O)
  *  ✅ ProjectIndexer             — project-wide incremental symbol index
- *  ✅ GoToDefinition             — frontendAI.goToDefinition  (F12)
- *  ✅ FindUsages                 — frontendAI.findUsages      (Shift+F12)
- *  ✅ ImportGraph                — frontendAI.showDependencies / showDependents / showCircularDeps
- *  ✅ AutoImport                 — lightbulb quick-fix + frontendAI.addImport
- *  ✅ RenameRefactor             — frontendAI.renameSymbol    (F2)
- *  ✅ AstCache                   — LRU + hash cache, frontendAI.cacheStats
+ *  ✅ GoToDefinition             — codePilot.goToDefinition  (F12)
+ *  ✅ FindUsages                 — codePilot.findUsages      (Shift+F12)
+ *  ✅ ImportGraph                — codePilot.showDependencies / showDependents / showCircularDeps
+ *  ✅ AutoImport                 — lightbulb quick-fix + codePilot.addImport
+ *  ✅ RenameRefactor             — codePilot.renameSymbol    (F2)
+ *  ✅ AstCache                   — LRU + hash cache, codePilot.cacheStats
  */
 
 import * as vscode from 'vscode';
@@ -108,11 +108,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── WebStorm-parity features ──────────────────────────────────────────────
 
-  registerGoToDefinition(context);      // F12 + frontendAI.goToDefinition
-  registerFindUsages(context);          // Shift+F12 + frontendAI.findUsages
+  registerGoToDefinition(context);      // F12 + codePilot.goToDefinition
+  registerFindUsages(context);          // Shift+F12 + codePilot.findUsages
   registerImportGraphCommands(context); // showDependencies / showDependents / showCircularDeps
-  registerAutoImport(context);          // Ctrl+. quick-fix + frontendAI.addImport
-  registerRenameRefactor(context);      // F2 + frontendAI.renameSymbol
+  registerAutoImport(context);          // Ctrl+. quick-fix + codePilot.addImport
+  registerRenameRefactor(context);      // F2 + codePilot.renameSymbol
   registerInlineUsagesLens(context);    // Inline "N usages" CodeLens → peek panel
   registerHoverProvider(context);       // Rich hover: signature + import + definition link
 

@@ -17,7 +17,7 @@
  * ─── Trigger ──────────────────────────────────────────────────────────────────
  *
  *  Automatic: appears in the 💡 lightbulb / Quick Fix menu (Ctrl+.)
- *  Manual command: frontendAI.addImport  (shows input box)
+ *  Manual command: codePilot.addImport  (shows input box)
  *
  * ─── Usage ────────────────────────────────────────────────────────────────────
  *
@@ -57,7 +57,7 @@ export function registerAutoImport(context: vscode.ExtensionContext): void {
 
   // Manual command: show input box
   const cmd = vscode.commands.registerCommand(
-    'frontendAI.addImport',
+    'codePilot.addImport',
     addImportHandler
   );
 

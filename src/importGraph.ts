@@ -20,9 +20,9 @@
  * ─── Navigation helpers ───────────────────────────────────────────────────────
  *
  *  • registerImportGraphCommands(context)
- *      frontendAI.showDependencies   — Quick Pick of direct deps, click to open
- *      frontendAI.showDependents     — Quick Pick of files that import current file
- *      frontendAI.showCircularDeps   — list all cycles in workspace
+ *      codePilot.showDependencies   — Quick Pick of direct deps, click to open
+ *      codePilot.showDependents     — Quick Pick of files that import current file
+ *      codePilot.showCircularDeps   — list all cycles in workspace
  */
 
 import * as vscode from 'vscode';
@@ -272,7 +272,7 @@ export function registerImportGraphCommands(context: vscode.ExtensionContext): v
   context.subscriptions.push(
 
     // ── Show direct dependencies ──────────────────────────────────────────
-    vscode.commands.registerCommand('frontendAI.showDependencies', async () => {
+    vscode.commands.registerCommand('codePilot.showDependencies', async () => {
       const fp = activeFilePath(); if (!fp) return;
       const graph = getImportGraph();
       const deps  = graph.getDependencies(fp);
@@ -293,7 +293,7 @@ export function registerImportGraphCommands(context: vscode.ExtensionContext): v
     }),
 
     // ── Show dependents ───────────────────────────────────────────────────
-    vscode.commands.registerCommand('frontendAI.showDependents', async () => {
+    vscode.commands.registerCommand('codePilot.showDependents', async () => {
       const fp  = activeFilePath(); if (!fp) return;
       const graph = getImportGraph();
       const deps  = graph.getDependents(fp);
@@ -314,7 +314,7 @@ export function registerImportGraphCommands(context: vscode.ExtensionContext): v
     }),
 
     // ── Show circular dependencies ────────────────────────────────────────
-    vscode.commands.registerCommand('frontendAI.showCircularDeps', async () => {
+    vscode.commands.registerCommand('codePilot.showCircularDeps', async () => {
       const cycles = getImportGraph().detectCircular();
 
       if (cycles.length === 0) {
@@ -350,7 +350,7 @@ export function registerImportGraphCommands(context: vscode.ExtensionContext): v
 
 function activeFilePath(): string | undefined {
   const fp = vscode.window.activeTextEditor?.document.fileName;
-  if (!fp) { vscode.window.showWarningMessage('frontendAI: No active editor.'); return undefined; }
+  if (!fp) { vscode.window.showWarningMessage('CodePilot: No active editor.'); return undefined; }
   return path.resolve(fp);
 }
 

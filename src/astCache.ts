@@ -340,7 +340,7 @@ export function getAstCache(opts?: AstCacheOptions): AstCache {
 
 export function registerCacheDiagnosticsCommand(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('frontendAI.cacheStats', () => {
+    vscode.commands.registerCommand('codePilot.cacheStats', () => {
       const s = getAstCache().stats();
       vscode.window.showInformationMessage(
         `AST Cache — ${s.size}/${s.capacity} entries | ` +

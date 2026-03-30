@@ -23,7 +23,7 @@ import { findAllUsages } from './findUsages';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const COMMAND = 'frontendAI.showInlineUsages';
+const COMMAND = 'codePilot.showInlineUsages';
 
 const SELECTOR: vscode.DocumentSelector = [
   { language: 'typescript'      },
@@ -130,7 +130,7 @@ export function registerInlineUsagesLens(context: vscode.ExtensionContext): void
 
           if (locations.length === 0) {
             vscode.window.showInformationMessage(
-              `frontendAI: No usages found for "${symbolName}".`
+              `CodePilot: No usages found for "${symbolName}".`
             );
             return;
           }

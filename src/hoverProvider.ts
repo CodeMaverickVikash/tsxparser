@@ -14,7 +14,7 @@
  *      └────────────────────────────────────────────────────┘
  *
  *  • Clicking the file-path link navigates to the definition via the
- *    `frontendAI.navigateToLocation` command.
+ *    `codePilot.navigateToLocation` command.
  *  • Import line only appears when the symbol lives in a different file
  *    and is imported in the current document.
  *
@@ -30,7 +30,7 @@ import { getIndexer, IndexedSymbol }  from './projectIndexer';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const NAV_CMD = 'frontendAI.navigateToLocation';
+export const NAV_CMD = 'codePilot.navigateToLocation';
 
 const SELECTOR: vscode.DocumentSelector = [
   { language: 'typescript'      },

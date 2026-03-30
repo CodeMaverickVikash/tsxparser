@@ -25,28 +25,28 @@
     "commands": [
       { "command": "tsxAstTree.revealRange",           "title": "Go to AST Node" },
       { "command": "tsxAstTree.findSymbol",            "title": "TSX: Find Symbol (Project-wide)", "icon": "$(search)" },
-      { "command": "frontendAI.goToDefinition",        "title": "FrontendAI: Go To Definition",    "icon": "$(go-to-file)" },
-      { "command": "frontendAI.findUsages",            "title": "FrontendAI: Find All Usages",     "icon": "$(references)" },
-      { "command": "frontendAI.showDependencies",      "title": "FrontendAI: Show Dependencies",   "icon": "$(type-hierarchy-sub)" },
-      { "command": "frontendAI.showDependents",        "title": "FrontendAI: Show Dependents",     "icon": "$(type-hierarchy-super)" },
-      { "command": "frontendAI.showCircularDeps",      "title": "FrontendAI: Show Circular Dependencies", "icon": "$(warning)" },
-      { "command": "frontendAI.addImport",             "title": "FrontendAI: Add Import",          "icon": "$(add)" },
-      { "command": "frontendAI.renameSymbol",          "title": "FrontendAI: Rename Symbol",       "icon": "$(edit)" },
-      { "command": "frontendAI.cacheStats",            "title": "FrontendAI: AST Cache Stats",     "icon": "$(database)" }
+      { "command": "codePilot.goToDefinition",        "title": "CodePilot: Go To Definition",    "icon": "$(go-to-file)" },
+      { "command": "codePilot.findUsages",            "title": "CodePilot: Find All Usages",     "icon": "$(references)" },
+      { "command": "codePilot.showDependencies",      "title": "CodePilot: Show Dependencies",   "icon": "$(type-hierarchy-sub)" },
+      { "command": "codePilot.showDependents",        "title": "CodePilot: Show Dependents",     "icon": "$(type-hierarchy-super)" },
+      { "command": "codePilot.showCircularDeps",      "title": "CodePilot: Show Circular Dependencies", "icon": "$(warning)" },
+      { "command": "codePilot.addImport",             "title": "CodePilot: Add Import",          "icon": "$(add)" },
+      { "command": "codePilot.renameSymbol",          "title": "CodePilot: Rename Symbol",       "icon": "$(edit)" },
+      { "command": "codePilot.cacheStats",            "title": "CodePilot: AST Cache Stats",     "icon": "$(database)" }
     ],
     "keybindings": [
       {
-        "command": "frontendAI.goToDefinition",
+        "command": "codePilot.goToDefinition",
         "key": "f12",
         "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/"
       },
       {
-        "command": "frontendAI.findUsages",
+        "command": "codePilot.findUsages",
         "key": "shift+f12",
         "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/"
       },
       {
-        "command": "frontendAI.renameSymbol",
+        "command": "codePilot.renameSymbol",
         "key": "f2",
         "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/"
       }
@@ -54,34 +54,34 @@
     "menus": {
       "editor/context": [
         {
-          "command": "frontendAI.goToDefinition",
+          "command": "codePilot.goToDefinition",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
           "group": "navigation@1"
         },
         {
-          "command": "frontendAI.findUsages",
+          "command": "codePilot.findUsages",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
           "group": "navigation@2"
         },
         {
-          "command": "frontendAI.renameSymbol",
+          "command": "codePilot.renameSymbol",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
           "group": "navigation@3"
         },
         {
-          "command": "frontendAI.showDependencies",
+          "command": "codePilot.showDependencies",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
-          "group": "frontendAI@1"
+          "group": "codePilot@1"
         },
         {
-          "command": "frontendAI.showDependents",
+          "command": "codePilot.showDependents",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
-          "group": "frontendAI@2"
+          "group": "codePilot@2"
         },
         {
-          "command": "frontendAI.addImport",
+          "command": "codePilot.addImport",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
-          "group": "frontendAI@3"
+          "group": "codePilot@3"
         }
       ]
     }

@@ -3,7 +3,7 @@
  *
  * ─── What it does ─────────────────────────────────────────────────────────────
  *
- *  • Registers VS Code command  frontendAI.renameSymbol
+ *  • Registers VS Code command  codePilot.renameSymbol
  *  • Also registers as a RenameProvider so F2 works natively.
  *  • Renames a symbol across the entire project:
  *      - Declaration site
@@ -52,7 +52,7 @@ export function registerRenameRefactor(context: vscode.ExtensionContext): void {
 
   // Manual command
   const cmd = vscode.commands.registerCommand(
-    'frontendAI.renameSymbol',
+    'codePilot.renameSymbol',
     renameSymbolHandler
   );
 
@@ -98,7 +98,7 @@ class RenameProvider implements vscode.RenameProvider {
 async function renameSymbolHandler(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
-    vscode.window.showWarningMessage('frontendAI: No active editor.');
+    vscode.window.showWarningMessage('CodePilot: No active editor.');
     return;
   }
 
@@ -107,7 +107,7 @@ async function renameSymbolHandler(): Promise<void> {
     position, /[a-zA-Z_$][a-zA-Z0-9_$]*/
   );
   if (!wordRange) {
-    vscode.window.showInformationMessage('frontendAI: No symbol at cursor.');
+    vscode.window.showInformationMessage('CodePilot: No symbol at cursor.');
     return;
   }
 
@@ -123,7 +123,7 @@ async function renameSymbolHandler(): Promise<void> {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title:    `frontendAI: Renaming "${oldName}" → "${newName}"…`,
+      title:    `CodePilot: Renaming "${oldName}" → "${newName}"…`,
       cancellable: false,
     },
     async () => {
@@ -149,7 +149,7 @@ async function renameSymbolHandler(): Promise<void> {
           `✅ Renamed "${oldName}" → "${newName}" in ${filesAffected} file${filesAffected !== 1 ? 's' : ''}.`
         );
       } else {
-        vscode.window.showErrorMessage('frontendAI: Rename failed — workspace edit was rejected.');
+        vscode.window.showErrorMessage('CodePilot: Rename failed — workspace edit was rejected.');
       }
     }
   );

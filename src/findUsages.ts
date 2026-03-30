@@ -3,7 +3,7 @@
  *
  * ─── What it does ─────────────────────────────────────────────────────────────
  *
- *  • Registers VS Code command  frontendAI.findUsages
+ *  • Registers VS Code command  codePilot.findUsages
  *  • Also registers as a ReferenceProvider so Shift+F12 works natively
  *  • Finds ALL identifier / JSX-tag usages of the symbol under cursor
  *  • Scans every indexed file's AST — not just a text search
@@ -48,7 +48,7 @@ export function registerFindUsages(context: vscode.ExtensionContext): void {
 
   // ── Manual command ─────────────────────────────────────────────────────────
   const cmd = vscode.commands.registerCommand(
-    'frontendAI.findUsages',
+    'codePilot.findUsages',
     findUsagesHandler
   );
 
@@ -73,7 +73,7 @@ export function registerFindUsages(context: vscode.ExtensionContext): void {
 async function findUsagesHandler(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
-    vscode.window.showWarningMessage('frontendAI: No active editor.');
+    vscode.window.showWarningMessage('CodePilot: No active editor.');
     return;
   }
 
@@ -84,14 +84,14 @@ async function findUsagesHandler(): Promise<void> {
   const symbolName = wordAt(document, position);
 
   if (!symbolName) {
-    vscode.window.showInformationMessage('frontendAI: No symbol at cursor.');
+    vscode.window.showInformationMessage('CodePilot: No symbol at cursor.');
     return;
   }
 
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title:    `frontendAI: Searching usages of "${symbolName}"…`,
+      title:    `CodePilot: Searching usages of "${symbolName}"…`,
       cancellable: false,
     },
     async () => {
@@ -99,7 +99,7 @@ async function findUsagesHandler(): Promise<void> {
 
       if (usages.length === 0) {
         vscode.window.showInformationMessage(
-          `frontendAI: No usages found for "${symbolName}".`
+          `CodePilot: No usages found for "${symbolName}".`
         );
         return;
       }
