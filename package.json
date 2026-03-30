@@ -2,7 +2,7 @@
   "name": "CodePilotStorm",
   "displayName": "CodePilotStorm",
   "description": "Full-featured JSX/TSX & TypeScript intelligence for VS Code: Go To Definition, Find Usages, Import Graph, Auto Import, Rename Refactor, Hover Docs, Breadcrumbs, and AST Explorer.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "Vikash",
   "repository": {
     "type": "git",
