@@ -1,32 +1,30 @@
 /**
  * hoverProvider.ts — WebStorm-style rich hover popup
  *
+ * Changes in this version
+ * ───────────────────────
+ *  • Hover popup now shows a framework badge when the symbol carries
+ *    framework metadata (React / Angular / Vue) with its role label.
+ *
  * ─── What it does ─────────────────────────────────────────────────────────────
  *
  *  • Registers a HoverProvider for TS / TSX / JS / JSX.
  *  • On hover over any identifier the popup shows:
  *
  *      ┌────────────────────────────────────────────────────┐
- *      │ (alias) const Cart: () => JSX.Element              │  ← type signature (code)
- *      │ import { Cart } from './shop/Cart'                 │  ← how it's imported (code)
+ *      │ (alias) const Cart: () => JSX.Element              │  ← type signature
+ *      │ import { Cart } from './shop/Cart'                 │  ← import (code)
+ *      │ ⚛ React functional component                       │  ← framework badge
  *      │ ─────────────────────────────────────────────────  │
- *      │ 🟦 src/pages/shop/Cart.tsx  ·  line 42  [link]    │  ← clickable definition link
+ *      │ 🟦 src/pages/shop/Cart.tsx  ·  line 42  [link]    │  ← definition link
  *      └────────────────────────────────────────────────────┘
- *
- *  • Clicking the file-path link navigates to the definition via the
- *    `codePilot.navigateToLocation` command.
- *  • Import line only appears when the symbol lives in a different file
- *    and is imported in the current document.
- *
- * ─── Usage ────────────────────────────────────────────────────────────────────
- *
- *  Call registerHoverProvider(context) inside activate().
  */
 
 import * as vscode from 'vscode';
 import * as path   from 'path';
 import { resolveAtPosition }          from './symbolResolver';
 import { getIndexer, IndexedSymbol }  from './projectIndexer';
+import { Framework }                  from './frameworkDetector';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,13 +37,27 @@ const SELECTOR: vscode.DocumentSelector = [
   { language: 'javascriptreact' },
 ];
 
+// Framework display helpers
+const FRAMEWORK_EMOJI: Record<Framework, string> = {
+  react:   '⚛',
+  angular: '🔺',
+  vue:     '💚',
+  unknown: '',
+};
+
+const FRAMEWORK_LABEL: Record<Framework, string> = {
+  react:   'React',
+  angular: 'Angular',
+  vue:     'Vue',
+  unknown: '',
+};
+
 // ─── Public registration ──────────────────────────────────────────────────────
 
 export function registerHoverProvider(context: vscode.ExtensionContext): void {
 
   const hoverReg = vscode.languages.registerHoverProvider(SELECTOR, new SymbolHoverProvider());
 
-  // Navigate-to command used by the markdown link inside the hover popup.
   const navCmd = vscode.commands.registerCommand(
     NAV_CMD,
     async (filePath: string, line: number, column: number) => {
@@ -88,7 +100,15 @@ class SymbolHoverProvider implements vscode.HoverProvider {
       if (imp) { md.appendCodeblock(imp, 'typescript'); }
     }
 
-    // ── 3. Separator + clickable definition link ──────────────────────────────
+    // ── 3. Framework badge ───────────────────────────────────────────────────
+    if (sym.framework && sym.framework !== 'unknown') {
+      const emoji = FRAMEWORK_EMOJI[sym.framework];
+      const fwLabel = FRAMEWORK_LABEL[sym.framework];
+      const roleLabel = sym.frameworkTag?.label ?? `${fwLabel} symbol`;
+      md.appendMarkdown(`\n\n${emoji} *${roleLabel}*`);
+    }
+
+    // ── 4. Separator + clickable definition link ──────────────────────────────
     md.appendMarkdown('\n\n---\n\n');
 
     const rel     = vscode.workspace.asRelativePath(sym.filePath);
@@ -103,7 +123,6 @@ class SymbolHoverProvider implements vscode.HoverProvider {
       `&nbsp;&nbsp;·&nbsp;&nbsp;line ${lineNum}`
     );
 
-    // Constrain hover to the hovered word so VS Code positions it correctly.
     const wordRange = document.getWordRangeAtPosition(position, /[a-zA-Z_$][a-zA-Z0-9_$]*/);
     return new vscode.Hover(md, wordRange);
   }
@@ -111,36 +130,27 @@ class SymbolHoverProvider implements vscode.HoverProvider {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Build a WebStorm-style type-signature line for an indexed symbol. */
 function buildSignature(sym: IndexedSymbol): string {
   const d = sym.detail ?? '';
 
   switch (sym.type) {
     case 'function':
       return `(function) function ${sym.name}${d}`;
-
     case 'class':
       return `(class) class ${sym.name}${d ? ` ${d}` : ''}`;
-
     case 'method': {
       const owner = sym.parent ? `${sym.parent}.` : '';
       return `(method) ${owner}${sym.name}${d}`;
     }
-
     case 'property': {
       const owner = sym.parent ? `${sym.parent}.` : '';
       return `(property) ${owner}${sym.name}${d ? `: ${d}` : ''}`;
     }
-
-    default: // variable
+    default:
       return `(alias) const ${sym.name}${d ? `: ${d}` : ''}`;
   }
 }
 
-/**
- * Return the import statement that brings `symbolName` into `fromFile`,
- * or undefined if no matching import is found.
- */
 function findImportLine(symbolName: string, fromFile: string): string | undefined {
   const parsed = getIndexer().getFile(fromFile);
   if (!parsed) return undefined;
@@ -160,4 +170,3 @@ function findImportLine(symbolName: string, fromFile: string): string | undefine
   }
   return undefined;
 }
-

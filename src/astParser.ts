@@ -11,6 +11,7 @@
  *  • File-level cache keyed on (path, mtime, size) — zero re-parse on unchanged files
  *  • Optional VS Code TextDocument fast-path (no disk I/O during editing)
  *  • Graceful handling of syntax errors — partial results still returned
+ *  • Framework-aware tagging (React / Angular / Vue)
  *
  * Usage
  * ─────
@@ -23,6 +24,7 @@
 import * as ts   from 'typescript';
 import * as fs   from 'fs';
 import * as path from 'path';
+import { detectFramework, enrichWithAngularDecorators, Framework, FrameworkTag } from './frameworkDetector';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -59,6 +61,9 @@ export interface ParsedFunction {
   generator:   boolean;
   exported:    boolean;
   span:        Span;
+  // ── Framework tag ──────────────────────────────────────────────────────────
+  framework?:  Framework;
+  frameworkTag?: FrameworkTag;
 }
 
 export interface ParsedProperty {
@@ -78,6 +83,9 @@ export interface ParsedClass {
   properties:  ParsedProperty[];
   exported:    boolean;
   span:        Span;
+  // ── Framework tag ──────────────────────────────────────────────────────────
+  framework?:  Framework;
+  frameworkTag?: FrameworkTag;
 }
 
 export interface ParsedVariable {
@@ -89,6 +97,9 @@ export interface ParsedVariable {
   hookName?:     string;
   exported:      boolean;
   span:          Span;
+  // ── Framework tag ──────────────────────────────────────────────────────────
+  framework?:  Framework;
+  frameworkTag?: FrameworkTag;
 }
 
 export interface NamedImport {
@@ -125,6 +136,11 @@ export interface ParsedFile {
   variables:  ParsedVariable[];
   imports:    ParsedImport[];
   exports:    ParsedExport[];
+  // ── Framework info ─────────────────────────────────────────────────────────
+  /** Primary framework detected in this file */
+  framework?: Framework;
+  /** Confidence 0–100 */
+  frameworkConfidence?: number;
 }
 
 // ─── Internal cache ───────────────────────────────────────────────────────────
@@ -230,10 +246,8 @@ function parseText(filePath: string, text: string): ParsedFile {
   const ctx: ParseContext = { sf, text };
 
   // FIX: parseDiagnostics is internal/private in newer TS versions.
-  // Use the public API instead: check for syntactic diagnostics length > 0.
   let hasErrors = false;
   try {
-    // Access via type assertion as it may exist as internal property
     const diags = (sf as any).parseDiagnostics;
     hasErrors = Array.isArray(diags) ? diags.length > 0 : false;
   } catch {
@@ -254,7 +268,55 @@ function parseText(filePath: string, text: string): ParsedFile {
   // Walk top-level statements
   ts.forEachChild(sf, node => visitTopLevel(node, ctx, result));
 
+  // ── Framework detection pass ──────────────────────────────────────────────
+  applyFrameworkTags(result);
+
   return result;
+}
+
+// ─── Framework tagging pass ──────────────────────────────────────────────────
+
+/**
+ * Run framework detection over a fully-populated ParsedFile and write the
+ * `framework` / `frameworkTag` fields back onto each symbol.
+ */
+function applyFrameworkTags(result: ParsedFile): void {
+  try {
+    const info = detectFramework(result);
+
+    // Enrich Angular-decorated classes via deep AST scan
+    if (info.detected.has('angular')) {
+      enrichWithAngularDecorators(info, result.filePath);
+    }
+
+    // Persist file-level info
+    result.framework           = info.primary;
+    result.frameworkConfidence = info.confidence;
+
+    // Tag individual symbols
+    for (const fn of result.functions) {
+      const tag = info.symbolTags.get(fn.name);
+      if (tag) { fn.framework = tag.framework; fn.frameworkTag = tag; }
+      else if (info.primary !== 'unknown') {
+        // Inherit file-level framework for un-tagged symbols if confidence is high
+        if (info.confidence >= 60) fn.framework = info.primary;
+      }
+    }
+
+    for (const cls of result.classes) {
+      const tag = info.symbolTags.get(cls.name);
+      if (tag) { cls.framework = tag.framework; cls.frameworkTag = tag; }
+      else if (info.confidence >= 60) cls.framework = info.primary;
+    }
+
+    for (const v of result.variables) {
+      const tag = info.symbolTags.get(v.name);
+      if (tag) { v.framework = tag.framework; v.frameworkTag = tag; }
+      else if (info.confidence >= 60) v.framework = info.primary;
+    }
+  } catch {
+    // Framework detection is best-effort; never fail the parse
+  }
 }
 
 // ─── Top-level visitor ────────────────────────────────────────────────────────
@@ -636,8 +698,6 @@ function extractVariableDeclaration(
         initKind = 'call';
       }
     }
-    // FIX: ts.isBooleanLiteral does not exist in the public API.
-    // Use SyntaxKind checks for true/false literals instead.
     else if (
       ts.isStringLiteral(init)  ||
       ts.isNumericLiteral(init) ||
@@ -668,7 +728,6 @@ function extractBindingPattern(
 
   const results: ParsedVariable[] = [];
 
-  // FIX: ts.isBindingPattern does not exist. Use the two individual checks instead.
   const collect = (bp: ts.ObjectBindingPattern | ts.ArrayBindingPattern) => {
     for (const el of bp.elements) {
       if (ts.isOmittedExpression(el)) continue;
@@ -678,7 +737,6 @@ function extractBindingPattern(
         : null;
 
       if (!name) {
-        // Nested pattern — recurse
         if (ts.isBindingElement(el) && (ts.isObjectBindingPattern(el.name) || ts.isArrayBindingPattern(el.name))) {
           collect(el.name);
         }

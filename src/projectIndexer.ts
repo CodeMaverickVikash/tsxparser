@@ -1,6 +1,13 @@
 /**
  * projectIndexer.ts — Project-Wide Symbol Indexer (Incremental Edition)
  *
+ * Changes in this version
+ * ───────────────────────
+ *  • IndexedSymbol gains  framework?: Framework  and  frameworkTag?: FrameworkTag
+ *    fields so every symbol carries its detected framework provenance.
+ *  • searchByFramework(fw)  — new query: return all symbols for a given framework.
+ *  • All existing behaviour is unchanged.
+ *
  * ─── Data-structure design ───────────────────────────────────────────────────
  *
  *  Forward index  (lookup by name — O(1))
@@ -11,45 +18,12 @@
  *
  *  File store     (raw parse results)
  *    files: Map<absPath, ParsedFile>
- *
- * ─── Incremental update pipeline ────────────────────────────────────────────
- *
- *  Event source             Debounce            Action
- *  ──────────────────────── ─────────────────── ─────────────────────────────
- *  onDidChangeTextDocument  TYPING_DEBOUNCE     updateFile (in-memory doc)
- *  onDidSaveTextDocument    SAVE_DEBOUNCE        updateFile (disk, supersedes typing)
- *  FileSystemWatcher change FS_DEBOUNCE          updateFile (disk, skipped if open)
- *  FileSystemWatcher create FS_DEBOUNCE          updateFile (disk)
- *  FileSystemWatcher delete immediate            removeFile
- *
- *  Per-file mutex prevents concurrent parses of the same path.
- *  A pending-update slot per file coalesces rapid multi-source bursts
- *  into at most one queued update — newer overwrites older.
- *
- * ─── Diff events ─────────────────────────────────────────────────────────────
- *
- *  onDidChangeIndex  fires with full IndexStats after every mutation
- *  onDidUpdateFile   fires with a FileDiff (added / removed / changed symbols)
- *                    so consumers (tree views, diagnostics) do surgical updates
- *
- * ─── Public API ──────────────────────────────────────────────────────────────
- *
- *  buildIndex()                    full workspace scan
- *  updateFile(filePath)            re-index one file from disk
- *  removeFile(filePath)            drop a file from the index
- *  getSymbol(name)                 case-insensitive lookup
- *  getSymbolExact(name)            O(1) exact lookup
- *  searchByPrefix(prefix)          autocomplete
- *  searchSymbols(query)            fuzzy substring
- *  getSymbolsInFile(filePath)      outline view
- *  findImporters(symbolName)       find usages
- *  getFile(filePath)               raw ParsedFile
- *  stats / index                   current stats + read-only index snapshot
  */
 
 import * as vscode from 'vscode';
 import * as path   from 'path';
 import { parseFile, parseDocument, invalidateCache, ParsedFile } from './astParser';
+import { Framework, FrameworkTag } from './frameworkDetector';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -69,6 +43,11 @@ export interface IndexedSymbol {
   exported:  boolean;
   detail?:   string;   // signature, type annotation, hook name …
   parent?:   string;   // owning class/component (methods & properties)
+  // ── Framework provenance ────────────────────────────────────────────────────
+  /** Which framework this symbol belongs to, if detected */
+  framework?:    Framework;
+  /** Full framework tag with role and display label */
+  frameworkTag?: FrameworkTag;
 }
 
 export interface ProjectIndex {
@@ -85,20 +64,18 @@ export interface IndexStats {
 }
 
 export type UpdateReason =
-  | 'typing'     // onDidChangeTextDocument
-  | 'save'       // onDidSaveTextDocument
-  | 'fs-change'  // FileSystemWatcher change (file not open in editor)
-  | 'fs-create'  // FileSystemWatcher create
-  | 'fs-delete'  // FileSystemWatcher delete
-  | 'manual';    // explicit updateFile() / removeFile()
+  | 'typing'
+  | 'save'
+  | 'fs-change'
+  | 'fs-create'
+  | 'fs-delete'
+  | 'manual';
 
-/** Granular per-file diff — emitted by onDidUpdateFile */
 export interface FileDiff {
   filePath: string;
   reason:   UpdateReason;
   added:    IndexedSymbol[];
   removed:  IndexedSymbol[];
-  /** Symbols whose location or detail changed (identity: type+name+parent) */
   changed:  Array<{ before: IndexedSymbol; after: IndexedSymbol }>;
 }
 
@@ -106,11 +83,8 @@ export interface FileDiff {
 
 export interface IndexerConfig {
   additionalExcludes?: string[];
-  /** Debounce for keystrokes. Default 500 ms. */
   typingDebounceMs?:  number;
-  /** Debounce after save (disk-flush wait). Default 80 ms. */
   saveDebounceMs?:    number;
-  /** Debounce for raw FS events (formatters, git). Default 300 ms. */
   fsDebounceMs?:      number;
 }
 
@@ -139,12 +113,6 @@ export class ProjectIndexer implements vscode.Disposable {
     files:   new Map(),
   };
 
-  /**
-   * Reverse index: absPath → Set<symbolName>
-   *
-   * Converts _eraseFile() from O(totalSymbols) → O(uniqueNamesInFile).
-   * Example: 10 000 symbols project, file with 25 symbols → ~400× fewer ops.
-   */
   private readonly _fileToNames = new Map<string, Set<string>>();
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -156,21 +124,11 @@ export class ProjectIndexer implements vscode.Disposable {
   private _patchCount = 0;
   private _disposables: vscode.Disposable[] = [];
 
-  // ── Separate debounce timers per source ────────────────────────────────────
-  // Keeping them separate lets a save cancel the typing timer without
-  // affecting the FS timer (and vice versa).
-
   private readonly _typingTimers = new Map<string, NodeJS.Timeout>();
   private readonly _saveTimers   = new Map<string, NodeJS.Timeout>();
   private readonly _fsTimers     = new Map<string, NodeJS.Timeout>();
 
-  // ── Per-file update lock (serialises concurrent parses for the same file) ──
-
   private readonly _updateLocks    = new Map<string, Promise<void>>();
-  /**
-   * Pending-update slot: one pending update per file maximum.
-   * Newer request overwrites the older pending one.
-   */
   private readonly _pendingUpdates = new Map<string, () => Promise<void>>();
 
   // ── Events ─────────────────────────────────────────────────────────────────
@@ -191,7 +149,6 @@ export class ProjectIndexer implements vscode.Disposable {
   // PUBLIC API
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** Full workspace scan with progress indicator. */
   async buildIndex(): Promise<IndexStats> {
     if (this._isBuilding) {
       return new Promise(resolve => {
@@ -237,13 +194,6 @@ export class ProjectIndexer implements vscode.Disposable {
     return stats;
   }
 
-  // ── Incremental mutations ──────────────────────────────────────────────────
-
-  /**
-   * Re-index a single file from disk.
-   * Invalidates the parser cache, diffs old vs new symbols, fires events.
-   * Concurrent calls for the same file are serialised automatically.
-   */
   async updateFile(filePath: string): Promise<void> {
     const abs = path.resolve(filePath);
     return this._enqueueUpdate(abs, 'manual', async () => {
@@ -256,10 +206,6 @@ export class ProjectIndexer implements vscode.Disposable {
     });
   }
 
-  /**
-   * Remove a file from the index entirely.
-   * Idempotent — safe to call for files not yet indexed.
-   */
   async removeFile(filePath: string): Promise<void> {
     const abs = path.resolve(filePath);
     return this._enqueueUpdate(abs, 'manual', async () => {
@@ -270,7 +216,6 @@ export class ProjectIndexer implements vscode.Disposable {
 
   // ── Query API ──────────────────────────────────────────────────────────────
 
-  /** Case-insensitive lookup; falls back to exact then case-insensitive scan. */
   getSymbol(name: string): IndexedSymbol[] {
     const exact = this._index.symbols.get(name);
     if (exact?.length) return exact;
@@ -281,12 +226,10 @@ export class ProjectIndexer implements vscode.Disposable {
     return [];
   }
 
-  /** O(1) exact case-sensitive lookup. */
   getSymbolExact(name: string): IndexedSymbol[] {
     return this._index.symbols.get(name) ?? [];
   }
 
-  /** Autocomplete: all symbols whose name starts with `prefix`. */
   searchByPrefix(prefix: string): IndexedSymbol[] {
     const lower = prefix.toLowerCase();
     const out: IndexedSymbol[] = [];
@@ -296,7 +239,6 @@ export class ProjectIndexer implements vscode.Disposable {
     return out;
   }
 
-  /** Fuzzy substring: chars of `query` appear in order in the symbol name. */
   searchSymbols(query: string): IndexedSymbol[] {
     if (!query) return [];
     const lower = query.toLowerCase();
@@ -307,7 +249,38 @@ export class ProjectIndexer implements vscode.Disposable {
     return out.sort((a, b) => a.name.length - b.name.length);
   }
 
-  /** All symbols defined in a specific file, sorted by line. */
+  /**
+   * NEW — Return all indexed symbols that belong to the given framework.
+   *
+   * Example usage:
+   *   const reactComponents = indexer.searchByFramework('react');
+   */
+  searchByFramework(framework: Framework): IndexedSymbol[] {
+    const out: IndexedSymbol[] = [];
+    for (const bucket of this._index.symbols.values()) {
+      for (const sym of bucket) {
+        if (sym.framework === framework) out.push(sym);
+      }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * NEW — Return framework breakdown stats across the indexed project.
+   */
+  frameworkStats(): Record<Framework | 'unknown', number> {
+    const counts: Record<string, number> = {
+      react: 0, angular: 0, vue: 0, unknown: 0,
+    };
+    for (const bucket of this._index.symbols.values()) {
+      for (const sym of bucket) {
+        const fw = sym.framework ?? 'unknown';
+        counts[fw] = (counts[fw] ?? 0) + 1;
+      }
+    }
+    return counts as Record<Framework | 'unknown', number>;
+  }
+
   getSymbolsInFile(filePath: string): IndexedSymbol[] {
     const abs   = path.resolve(filePath);
     const names = this._fileToNames.get(abs);
@@ -320,7 +293,6 @@ export class ProjectIndexer implements vscode.Disposable {
     return out.sort((a, b) => a.location.line - b.location.line);
   }
 
-  /** Find every file that imports `symbolName`. */
   findImporters(symbolName: string): Array<{ filePath: string; importedAs: string }> {
     const out: Array<{ filePath: string; importedAs: string }> = [];
     for (const [fp, parsed] of this._index.files) {
@@ -369,14 +341,12 @@ export class ProjectIndexer implements vscode.Disposable {
     const saveMs   = this.config.saveDebounceMs   ?? 80;
     const fsMs     = this.config.fsDebounceMs     ?? 300;
 
-    // ── onDidChangeTextDocument ─── keystrokes / in-memory ────────────────
     vscode.workspace.onDidChangeTextDocument(e => {
       if (!isSupportedLang(e.document.languageId)) return;
       const abs = path.resolve(e.document.fileName);
       if (this._isExcluded(abs)) return;
 
       debounceOn(this._typingTimers, abs, typingMs, () => {
-        // Capture document reference at schedule time to avoid stale closure
         const doc = e.document;
         this._enqueueUpdate(abs, 'typing', async () => {
           try {
@@ -387,13 +357,11 @@ export class ProjectIndexer implements vscode.Disposable {
       });
     }, null, this._disposables);
 
-    // ── onDidSaveTextDocument ─────────────────────────────────────────────
     vscode.workspace.onDidSaveTextDocument(doc => {
       if (!isSupportedLang(doc.languageId)) return;
       const abs = path.resolve(doc.fileName);
       if (this._isExcluded(abs)) return;
 
-      // Save supersedes any pending typing update for this file
       cancelTimer(this._typingTimers, abs);
 
       debounceOn(this._saveTimers, abs, saveMs, () => {
@@ -409,7 +377,6 @@ export class ProjectIndexer implements vscode.Disposable {
       });
     }, null, this._disposables);
 
-    // ── FileSystemWatcher ─── external tools, git, formatters ─────────────
     const watcher = vscode.workspace.createFileSystemWatcher(
       GLOB_PATTERN, false, false, false
     );
@@ -429,7 +396,6 @@ export class ProjectIndexer implements vscode.Disposable {
     watcher.onDidChange(uri => {
       const abs = path.resolve(uri.fsPath);
       if (this._isExcluded(abs)) return;
-      // Skip: if the file is open in an editor the save path already handles it
       if (this._isOpenInEditor(abs)) return;
 
       debounceOn(this._fsTimers, abs, fsMs, () => {
@@ -443,7 +409,6 @@ export class ProjectIndexer implements vscode.Disposable {
 
     watcher.onDidDelete(uri => {
       const abs = path.resolve(uri.fsPath);
-      // Immediate — cancel all pending timers for this file
       cancelTimer(this._typingTimers, abs);
       cancelTimer(this._saveTimers,   abs);
       cancelTimer(this._fsTimers,     abs);
@@ -461,16 +426,6 @@ export class ProjectIndexer implements vscode.Disposable {
   // PRIVATE: PER-FILE UPDATE LOCK
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Serialise updates for a single file.
-   *
-   * • No existing lock  → run immediately, set lock promise.
-   * • Lock exists       → store thunk as "pending" (overwrites previous pending).
-   *
-   * After the running promise settles, it checks for a pending thunk and
-   * chains it.  Result: at most 1 running + 1 queued per file, regardless
-   * of how many watcher events fire in rapid succession.
-   */
   private _enqueueUpdate(
     abs:  string,
     _reason: UpdateReason,
@@ -488,7 +443,6 @@ export class ProjectIndexer implements vscode.Disposable {
       return p;
     }
 
-    // Queue: newer overwrites older pending
     return new Promise<void>(resolve => {
       this._pendingUpdates.set(abs, async () => { await work(); resolve(); });
     });
@@ -498,14 +452,6 @@ export class ProjectIndexer implements vscode.Disposable {
   // PRIVATE: INDEX MUTATIONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /**
-   * Atomic incremental patch for one file:
-   *  1. Snapshot old symbols (O(names in file) via reverse index).
-   *  2. Erase old entries from forward + reverse index.
-   *  3. Re-index the new ParsedFile.
-   *  4. Snapshot new symbols.
-   *  5. Compute and emit diff.
-   */
   private async _applyFilePatch(
     abs:    string,
     parsed: ParsedFile,
@@ -550,40 +496,73 @@ export class ProjectIndexer implements vscode.Disposable {
     };
 
     for (const fn of parsed.functions) {
-      add({ name: fn.name, type: 'function', filePath: abs,
-            location: locOf(fn.span), exported: fn.exported,
-            detail: buildFunctionDetail(fn) });
+      add({
+        name:         fn.name,
+        type:         'function',
+        filePath:     abs,
+        location:     locOf(fn.span),
+        exported:     fn.exported,
+        detail:       buildFunctionDetail(fn),
+        framework:    fn.framework,
+        frameworkTag: fn.frameworkTag,
+      });
     }
 
     for (const cls of parsed.classes) {
-      add({ name: cls.name, type: 'class', filePath: abs,
-            location: locOf(cls.span), exported: cls.exported,
-            detail: cls.superClass ? `extends ${cls.superClass}` : undefined });
+      add({
+        name:         cls.name,
+        type:         'class',
+        filePath:     abs,
+        location:     locOf(cls.span),
+        exported:     cls.exported,
+        detail:       cls.superClass ? `extends ${cls.superClass}` : undefined,
+        framework:    cls.framework,
+        frameworkTag: cls.frameworkTag,
+      });
 
       for (const m of cls.methods) {
-        add({ name: m.name, type: 'method', filePath: abs,
-              location: locOf(m.span), exported: false,
-              detail: buildFunctionDetail(m), parent: cls.name });
+        add({
+          name:         m.name,
+          type:         'method',
+          filePath:     abs,
+          location:     locOf(m.span),
+          exported:     false,
+          detail:       buildFunctionDetail(m),
+          parent:       cls.name,
+          framework:    cls.framework,   // inherit from class
+          frameworkTag: cls.frameworkTag,
+        });
       }
       for (const p of cls.properties) {
-        add({ name: p.name, type: 'property', filePath: abs,
-              location: locOf(p.span), exported: false,
-              detail: p.type, parent: cls.name });
+        add({
+          name:         p.name,
+          type:         'property',
+          filePath:     abs,
+          location:     locOf(p.span),
+          exported:     false,
+          detail:       p.type,
+          parent:       cls.name,
+          framework:    cls.framework,
+          frameworkTag: cls.frameworkTag,
+        });
       }
     }
 
     for (const v of parsed.variables) {
       if (v.initKind === 'arrow' || v.initKind === 'function') continue;
-      add({ name: v.name, type: 'variable', filePath: abs,
-            location: locOf(v.span), exported: v.exported,
-            detail: v.hookName ? `hook: ${v.hookName}` : (v.type ?? v.kind) });
+      add({
+        name:         v.name,
+        type:         'variable',
+        filePath:     abs,
+        location:     locOf(v.span),
+        exported:     v.exported,
+        detail:       v.hookName ? `hook: ${v.hookName}` : (v.type ?? v.kind),
+        framework:    v.framework,
+        frameworkTag: v.frameworkTag,
+      });
     }
   }
 
-  /**
-   * Remove all forward-index entries for `abs`.
-   * O(unique symbol names in file) — not O(total symbols in project).
-   */
   private _eraseFile(abs: string): void {
     this._index.files.delete(abs);
     const names = this._fileToNames.get(abs);
@@ -599,8 +578,6 @@ export class ProjectIndexer implements vscode.Disposable {
     this._fileToNames.delete(abs);
   }
 
-  // ── Reverse-index snapshot (used for diff computation) ─────────────────────
-
   private _snapshotFile(abs: string): IndexedSymbol[] {
     const names = this._fileToNames.get(abs);
     if (!names?.size) return [];
@@ -611,8 +588,6 @@ export class ProjectIndexer implements vscode.Disposable {
     }
     return out;
   }
-
-  // ── Misc helpers ───────────────────────────────────────────────────────────
 
   private _makeStats(buildTimeMs: number): IndexStats {
     const s: IndexStats = {
@@ -674,12 +649,6 @@ export function getSymbol(name: string): IndexedSymbol[] {
 
 // ─── Pure utility functions ───────────────────────────────────────────────────
 
-/**
- * Compute a symbol-level diff between two snapshots of the same file.
- *
- * Identity key: "type::name::parent?" — two symbols with the same key
- * in before+after are "changed" (location or detail updated), not add+remove.
- */
 function computeDiff(
   filePath: string,
   reason:   UpdateReason,
@@ -691,9 +660,9 @@ function computeDiff(
   const bMap = new Map(before.map(s => [key(s), s]));
   const aMap = new Map(after.map( s => [key(s), s]));
 
-  const added:   IndexedSymbol[]         = [];
-  const removed: IndexedSymbol[]         = [];
-  const changed: FileDiff['changed']     = [];
+  const added:   IndexedSymbol[]     = [];
+  const removed: IndexedSymbol[]     = [];
+  const changed: FileDiff['changed'] = [];
 
   for (const [k, bSym] of bMap) {
     const aSym = aMap.get(k);
@@ -712,7 +681,8 @@ function symChanged(a: IndexedSymbol, b: IndexedSymbol): boolean {
     a.location.line   !== b.location.line   ||
     a.location.column !== b.location.column ||
     a.exported        !== b.exported        ||
-    a.detail          !== b.detail
+    a.detail          !== b.detail          ||
+    a.framework       !== b.framework
   );
 }
 
