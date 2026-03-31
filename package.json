@@ -32,6 +32,7 @@
       { "command": "tsxAstTree.findSymbol",            "title": "TSX: Find Symbol (Project-wide)", "icon": "$(search)" },
       { "command": "codePilot.goToDefinition",        "title": "CodePilot: Go To Definition",    "icon": "$(go-to-file)" },
       { "command": "codePilot.findUsages",            "title": "CodePilot: Find All Usages",     "icon": "$(references)" },
+      { "command": "codePilot.findUsagesSmart", "title": "CodePilot: Find Usages (Smart)" },
       { "command": "codePilot.showDependencies",      "title": "CodePilot: Show Dependencies",   "icon": "$(type-hierarchy-sub)" },
       { "command": "codePilot.showDependents",        "title": "CodePilot: Show Dependents",     "icon": "$(type-hierarchy-super)" },
       { "command": "codePilot.showCircularDeps",      "title": "CodePilot: Show Circular Dependencies", "icon": "$(warning)" },
@@ -64,7 +65,7 @@
           "group": "navigation@1"
         },
         {
-          "command": "codePilot.findUsages",
+          "command": "codePilot.findUsagesSmart",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
           "group": "navigation@2"
         },
