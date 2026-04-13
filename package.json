@@ -38,7 +38,9 @@
       { "command": "codePilot.showCircularDeps",      "title": "CodePilot: Show Circular Dependencies", "icon": "$(warning)" },
       { "command": "codePilot.addImport",             "title": "CodePilot: Add Import",          "icon": "$(add)" },
       { "command": "codePilot.renameSymbol",          "title": "CodePilot: Rename Symbol",       "icon": "$(edit)" },
-      { "command": "codePilot.cacheStats",            "title": "CodePilot: AST Cache Stats",     "icon": "$(database)" }
+      { "command": "codePilot.cacheStats",            "title": "CodePilot: AST Cache Stats",     "icon": "$(database)" },
+      { "command": "codePilot.showFrameworkStats",    "title": "CodePilot: Show Framework Stats", "icon": "$(graph)" },
+      { "command": "codePilot.findFrameworkSymbols",  "title": "CodePilot: Browse Framework Symbols", "icon": "$(symbol-namespace)" }
     ],
     "keybindings": [
       {
@@ -88,6 +90,11 @@
           "command": "codePilot.addImport",
           "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
           "group": "codePilot@3"
+        },
+        {
+          "command": "codePilot.findFrameworkSymbols",
+          "when": "editorTextFocus && editorLangId =~ /javascriptreact|typescriptreact|typescript|javascript/",
+          "group": "codePilot@4"
         }
       ]
     }

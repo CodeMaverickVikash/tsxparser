@@ -25,15 +25,12 @@ import {
   KIND_ICONS,
   KIND_LABELS,
   UsageKind,
-  detectFramework,
-  FrameworkUsage,
 } from './frameworkAnalyzer';
 
 // ─── Command ──────────────────────────────────────────────────────────────────
 
 export const NAV_CMD       = 'codePilot.navigateToLocation';
 export const FIND_CMD      = 'codePilot.findUsagesSmart';
-export const SHOW_PANEL_CMD = 'codePilot.showUsagePanelFromHover';
 
 const SELECTOR: vscode.DocumentSelector = [
   { language: 'typescript'      },
@@ -100,7 +97,7 @@ class SmartHoverProvider implements vscode.HoverProvider {
     md.supportHtml = false;
 
     // ── 1. Framework badge + type signature ─────────────────────────────────
-    const fw = detectFramework(sym.filePath, '');  // fast path — no text read
+    const fw = sym.framework ?? 'generic';
     const fwEmoji = fw === 'react' ? '⚛ ' : fw === 'angular' ? '🅰 ' : fw === 'vue' ? '💚 ' : '';
     md.appendCodeblock(`${fwEmoji}${buildSignature(sym)}`, 'typescript');
 
@@ -171,14 +168,11 @@ class SmartHoverProvider implements vscode.HoverProvider {
     const kindCounts = new Map<UsageKind, number>();
     const filesWithUsages = new Set<string>();
     let total = 0;
-    let framework = 'generic';
-
     for (const fp of sample) {
       try {
         const usages = classifyUsagesInFile(fp, symbolName);
         if (usages.length > 0) {
           filesWithUsages.add(fp);
-          if (usages[0].framework !== 'generic') framework = usages[0].framework;
           for (const u of usages) {
             kindCounts.set(u.kind, (kindCounts.get(u.kind) ?? 0) + 1);
             total++;
@@ -191,7 +185,7 @@ class SmartHoverProvider implements vscode.HoverProvider {
       kindCounts,
       fileCount: filesWithUsages.size,
       total,
-      framework,
+      framework: 'generic',
     };
     _hoverCache.set(symbolName, result);
     return result;

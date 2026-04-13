@@ -26,6 +26,7 @@
 
 import * as vscode from 'vscode';
 import * as path   from 'path';
+import { ParsedImport } from './astParser';
 import { getIndexer, IndexedSymbol } from './projectIndexer';
 
 // ─── Diagnostic codes that signal "symbol not found" ─────────────────────────
@@ -205,17 +206,19 @@ async function applyImportEdit(
   document: vscode.TextDocument,
   stmt:     string
 ): Promise<void> {
-  // Skip if already imported
-  const text = document.getText();
-  if (text.includes(stmt.replace(/;$/, ''))) {
+  const edit       = new vscode.WorkspaceEdit();
+  const plan       = planImportEdit(document, stmt);
+
+  if (plan.type === 'noop') {
     vscode.window.showInformationMessage('Import already exists.');
     return;
   }
 
-  const insertLine = findImportInsertLine(document);
-  const edit       = new vscode.WorkspaceEdit();
-  const pos        = new vscode.Position(insertLine, 0);
-  edit.insert(document.uri, pos, stmt + '\n');
+  if (plan.type === 'replace') {
+    edit.replace(document.uri, plan.range, plan.text);
+  } else {
+    edit.insert(document.uri, plan.position, plan.text);
+  }
 
   await vscode.workspace.applyEdit(edit);
 }
@@ -228,7 +231,6 @@ function buildCodeAction(
   candidate:   ImportCandidate,
   stmt:        string
 ): vscode.CodeAction {
-  const rel    = vscode.workspace.asRelativePath(candidate.symbol.filePath);
   const action = new vscode.CodeAction(
     `Add import: ${stmt}`,
     vscode.CodeActionKind.QuickFix
@@ -236,13 +238,65 @@ function buildCodeAction(
   action.diagnostics   = [diagnostic];
   action.isPreferred   = true;
 
-  const insertLine = findImportInsertLine(document);
-  const pos        = new vscode.Position(insertLine, 0);
-  const edit       = new vscode.WorkspaceEdit();
-  edit.insert(document.uri, pos, stmt + '\n');
-  action.edit = edit;
+  const plan = planImportEdit(document, stmt);
+  if (plan.type !== 'noop') {
+    const edit = new vscode.WorkspaceEdit();
+    if (plan.type === 'replace') {
+      edit.replace(document.uri, plan.range, plan.text);
+    } else {
+      edit.insert(document.uri, plan.position, plan.text);
+    }
+    action.edit = edit;
+  }
 
   return action;
+}
+
+type ImportEditPlan =
+  | { type: 'noop' }
+  | { type: 'insert'; position: vscode.Position; text: string }
+  | { type: 'replace'; range: vscode.Range; text: string };
+
+function planImportEdit(document: vscode.TextDocument, stmt: string): ImportEditPlan {
+  const parsed = getIndexer().getFile(document.fileName);
+  const incoming = parseImportStatement(stmt);
+  if (!parsed || !incoming) {
+    return {
+      type: 'insert',
+      position: new vscode.Position(findImportInsertLine(document), 0),
+      text: stmt + '\n',
+    };
+  }
+
+  const existing = parsed.imports.find(imp => imp.module === incoming.module);
+  if (!existing) {
+    return {
+      type: 'insert',
+      position: new vscode.Position(findImportInsertLine(document), 0),
+      text: stmt + '\n',
+    };
+  }
+
+  if (hasImportConflict(existing, incoming)) {
+    return { type: 'noop' };
+  }
+
+  if (incoming.named.length > 0 && !existing.typeOnly) {
+    const merged = mergeNamedImportStatement(existing, incoming.named[0].name);
+    if (merged) {
+      return {
+        type: 'replace',
+        range: toRange(document, existing.span),
+        text: merged,
+      };
+    }
+  }
+
+  return {
+    type: 'insert',
+    position: new vscode.Position(findImportInsertLine(document), 0),
+    text: stmt + '\n',
+  };
 }
 
 // ─── Import insertion heuristic ───────────────────────────────────────────────
@@ -308,4 +362,79 @@ function extractSymbolName(message: string): string | null {
   // "Module '"./x"' has no exported member 'Foo'."
   const m = message.match(/'([A-Za-z_$][A-Za-z0-9_$]*)'/);
   return m ? m[1] : null;
+}
+
+function parseImportStatement(stmt: string): ParsedImport | null {
+  const defaultMatch = stmt.match(/^import\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"];?$/);
+  if (defaultMatch) {
+    return {
+      module: defaultMatch[2],
+      defaultImport: defaultMatch[1],
+      named: [],
+      typeOnly: false,
+      span: emptySpan(),
+    };
+  }
+
+  const namedMatch = stmt.match(/^import\s+\{\s*([A-Za-z_$][\w$]*)\s*\}\s+from\s+['"]([^'"]+)['"];?$/);
+  if (namedMatch) {
+    return {
+      module: namedMatch[2],
+      named: [{ name: namedMatch[1] }],
+      typeOnly: false,
+      span: emptySpan(),
+    };
+  }
+
+  const namespaceMatch = stmt.match(/^import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s+['"]([^'"]+)['"];?$/);
+  if (namespaceMatch) {
+    return {
+      module: namespaceMatch[2],
+      namespaceImport: namespaceMatch[1],
+      named: [],
+      typeOnly: false,
+      span: emptySpan(),
+    };
+  }
+
+  return null;
+}
+
+function hasImportConflict(existing: ParsedImport, incoming: ParsedImport): boolean {
+  if (incoming.defaultImport) {
+    return existing.defaultImport === incoming.defaultImport;
+  }
+
+  if (incoming.namespaceImport) {
+    return existing.namespaceImport === incoming.namespaceImport;
+  }
+
+  return incoming.named.some(
+    item => existing.named.some(existingItem => (existingItem.alias ?? existingItem.name) === item.name)
+  );
+}
+
+function mergeNamedImportStatement(existing: ParsedImport, symbolName: string): string | null {
+  if (existing.defaultImport || existing.namespaceImport) {
+    return null;
+  }
+
+  const names = new Set(existing.named.map(item => item.alias ?? item.name));
+  names.add(symbolName);
+
+  return `import { ${Array.from(names).sort((a, b) => a.localeCompare(b)).join(', ')} } from '${existing.module}';`;
+}
+
+function toRange(_document: vscode.TextDocument, span: ParsedImport['span']): vscode.Range {
+  return new vscode.Range(
+    new vscode.Position(span.start.line, span.start.character),
+    new vscode.Position(span.end.line, span.end.character)
+  );
+}
+
+function emptySpan(): ParsedImport['span'] {
+  return {
+    start: { line: 0, character: 0, offset: 0 },
+    end: { line: 0, character: 0, offset: 0 },
+  };
 }

@@ -16,7 +16,7 @@ Locate every reference to a symbol project-wide with a single keystroke (`Shift+
 Visualise your project's dependency graph. Use **Show Dependencies** to see what a file imports, and **Show Dependents** to see what imports it. Circular dependency detection is also built in.
 
 ### ⚡ Auto Import
-Automatically resolve and insert missing import statements for components, hooks, utilities, and types — keeping your files clean without manual effort.
+Automatically resolve and insert missing import statements for components, hooks, utilities, and types — and now merge into existing named imports instead of duplicating them.
 
 ### ✏️ Rename Refactor
 Safely rename any symbol across the entire codebase in one step (`F2`). All references are updated atomically.
@@ -35,6 +35,9 @@ CodeLens annotations appear above every symbol, showing its usage count inline. 
 
 ### 📦 Project Indexer
 On activation, CodePilotStorm indexes the entire workspace so that all features work instantly — even on cold start — with incremental updates as files change.
+
+### 🧩 Framework Symbol Browser
+Inspect indexed React, Angular, and Vue symbols directly from CodePilot commands. You can view framework symbol counts and jump straight to tagged definitions from the command palette or editor context menu.
 
 ---
 
@@ -72,6 +75,17 @@ All shortcuts are active when the editor is focused on a supported file type.
 
 ---
 
+## Commands
+
+Alongside the core navigation commands, CodePilotStorm also exposes:
+
+- `CodePilot: Browse Framework Symbols`
+- `CodePilot: Show Framework Stats`
+- `CodePilot: AST Cache Stats`
+- `CodePilot: Add Import`
+
+---
+
 ## Known Issues
 
 - Very large monorepos (10 000+ files) may experience a short delay during the initial workspace index build.
@@ -80,6 +94,11 @@ All shortcuts are active when the editor is focused on a supported file type.
 ---
 
 ## Release Notes
+
+### 0.2.1
+- Added framework-aware symbol browsing and framework stats commands.
+- Improved auto-import so named imports merge into existing declarations when possible.
+- Reused the AST cache during full indexing and removed generated test artifacts from source.
 
 ### 0.2.0
 - Added Inline Usages CodeLens, Breadcrumb Provider, and Document Symbol Provider.

@@ -26,6 +26,7 @@ import { registerRenameRefactor }         from './renameRefactor';
 import { getAstCache, registerCacheDiagnosticsCommand } from './astCache';
 import { registerInlineUsagesLens }       from './inlineUsagesLens';
 import { registerSmartHoverProvider } from './smartHoverProvider';
+import { registerFrameworkCommands } from './frameworkCommands';
 
 const SUPPORTED = ['javascriptreact', 'typescriptreact', 'typescript', 'javascript'];
 const SELECTOR: vscode.DocumentSelector = SUPPORTED.map(lang => ({ language: lang }));
@@ -115,6 +116,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerRenameRefactor(context);      // F2 + codePilot.renameSymbol
   registerInlineUsagesLens(context);    // Inline "N usages" CodeLens → peek panel
   registerSmartHoverProvider(context);       // Rich hover: signature + import + definition link
+  registerFrameworkCommands(context);   // Browse framework-tagged symbols and stats
 
   // ── Existing symbol search command ────────────────────────────────────────
   const findSymbolCmd = vscode.commands.registerCommand(

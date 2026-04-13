@@ -26,6 +26,7 @@
 import * as ts   from 'typescript';
 import * as fs   from 'fs';
 import * as path from 'path';
+import { detectWorkspaceFramework } from './frameworkWorkspace';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -74,6 +75,7 @@ export interface UsageSummary {
   totalCount:   number;
   byKind:       Map<UsageKind, FrameworkUsage[]>;
   byFile:       Map<string, FrameworkUsage[]>;
+  byFramework:  Map<'react' | 'angular' | 'vue' | 'generic', FrameworkUsage[]>;
   framework:    'react' | 'angular' | 'vue' | 'generic' | 'mixed';
 }
 
@@ -129,6 +131,7 @@ export function detectFramework(
   filePath: string,
   text: string
 ): 'react' | 'angular' | 'vue' | 'generic' {
+  const workspaceFramework = detectWorkspaceFramework(filePath);
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.vue') return 'vue';
   if (text.includes('@angular/core') || text.includes('@Component') || text.includes('@Injectable')) {
@@ -142,7 +145,7 @@ export function detectFramework(
   ) {
     return 'react';
   }
-  return 'generic';
+  return workspaceFramework;
 }
 
 // ─── Main classifier ──────────────────────────────────────────────────────────
@@ -441,6 +444,7 @@ export async function analyzeUsages(
   // Build summary maps
   const byKind = new Map<UsageKind, FrameworkUsage[]>();
   const byFile = new Map<string, FrameworkUsage[]>();
+  const byFramework = new Map<'react' | 'angular' | 'vue' | 'generic', FrameworkUsage[]>();
   const frameworks = new Set<string>();
 
   for (const u of allUsages) {
@@ -451,6 +455,9 @@ export async function analyzeUsages(
     const f = byFile.get(u.filePath) ?? [];
     f.push(u);
     byFile.set(u.filePath, f);
+    const fw = byFramework.get(u.framework) ?? [];
+    fw.push(u);
+    byFramework.set(u.framework, fw);
   }
 
   const fwArray = Array.from(frameworks).filter(f => f !== 'generic');
@@ -460,7 +467,7 @@ export async function analyzeUsages(
       ? fwArray[0] as any
       : 'generic';
 
-  return { symbolName, totalCount: allUsages.length, byKind, byFile, framework };
+  return { symbolName, totalCount: allUsages.length, byKind, byFile, byFramework, framework };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

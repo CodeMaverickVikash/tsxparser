@@ -23,6 +23,7 @@
 import * as vscode from 'vscode';
 import * as path   from 'path';
 import { parseFile, parseDocument, invalidateCache, ParsedFile } from './astParser';
+import { batchParseWithCache } from './astCache';
 import { Framework, FrameworkTag } from './frameworkDetector';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -98,8 +99,6 @@ const DEFAULT_EXCLUDES = [
 
 const SUPPORTED_EXTS    = ['.ts', '.tsx', '.js', '.jsx'];
 const GLOB_PATTERN      = '**/*.{ts,tsx,js,jsx}';
-const PARSE_CONCURRENCY = 12;
-
 // ═════════════════════════════════════════════════════════════════════════════
 // ProjectIndexer
 // ═════════════════════════════════════════════════════════════════════════════
@@ -176,13 +175,18 @@ export class ProjectIndexer implements vscode.Disposable {
         const total = paths.length;
         let done = 0;
 
-        await runBatched(paths, PARSE_CONCURRENCY, async fp => {
-          try { this._indexFile(parseFile(fp)); } catch { /* skip */ }
-          done++;
-          if (done % 20 === 0 || done === total) {
-            progress.report({ message: `${done}/${total} files` });
+        await batchParseWithCache(
+          paths,
+          parsed => {
+            this._indexFile(parsed);
+          },
+          (count, totalFiles) => {
+            done = count;
+            if (done % 20 === 0 || done === totalFiles) {
+              progress.report({ message: `${done}/${totalFiles} files` });
+            }
           }
-        });
+        );
 
         const s = this._makeStats(Date.now() - t0);
         this._isBuilding = false;
@@ -729,14 +733,6 @@ function buildFunctionDetail(fn: {
     .map(p => `${p.rest ? '...' : ''}${p.name}${p.optional ? '?' : ''}${p.type ? `: ${p.type}` : ''}`)
     .join(', ');
   return `${fn.async ? 'async ' : ''}(${ps})${fn.returnType ? ` → ${fn.returnType}` : ''}`;
-}
-
-async function runBatched<T>(
-  items: T[], concurrency: number, task: (item: T) => Promise<void>
-): Promise<void> {
-  let i = 0;
-  const w = async () => { while (i < items.length) await task(items[i++]); };
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, w));
 }
 
 function isSupportedLang(lang: string): boolean {
